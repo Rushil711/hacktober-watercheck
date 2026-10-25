@@ -114,14 +114,15 @@ function ExplainCard({ insights, loading, error }: { insights: Insights | null; 
 }
 
 function VoiceButton({ report, insights, voice }: { report: BeachReport; insights: Insights | null; voice: Props['voice'] }) {
-  const [state, setState] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle')
+  const [state, setState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
+  const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   useEffect(
     () => () => {
-      audioRef.current?.pause()
+      if (audioUrl) URL.revokeObjectURL(audioUrl)
     },
-    [report],
+    [audioUrl],
   )
   const configured = voice?.configured ?? false
   const play = async () => {
@@ -129,13 +130,8 @@ function VoiceButton({ report, insights, voice }: { report: BeachReport; insight
     setError(null)
     try {
       const blob = await api.voiceBriefing(report, insights)
-      const url = URL.createObjectURL(blob)
-      audioRef.current?.pause()
-      const audio = new Audio(url)
-      audioRef.current = audio
-      audio.onended = () => setState('idle')
-      await audio.play()
-      setState('playing')
+      setAudioUrl(URL.createObjectURL(blob))
+      setState('ready')
     } catch (e) {
       setState('error')
       setError(e instanceof Error ? e.message : 'Voice briefing failed')
@@ -150,8 +146,9 @@ function VoiceButton({ report, insights, voice }: { report: BeachReport; insight
         className="flex items-center justify-center gap-2 rounded-xl bg-teal-400/90 px-4 py-2.5 text-sm font-semibold text-navy-900 transition hover:bg-teal-300 disabled:cursor-not-allowed disabled:bg-slate-600/60 disabled:text-slate-300"
       >
         {state === 'loading' ? <LoaderCircle className="animate-spin" size={16} /> : <Volume2 size={16} />}
-        {state === 'playing' ? 'Playing Grok Voice briefing…' : 'Play Grok Voice briefing'}
+        {state === 'loading' ? 'Grok is recording the briefing…' : 'Play Grok Voice briefing'}
       </button>
+      {audioUrl && <audio ref={audioRef} src={audioUrl} controls autoPlay className="mt-1 w-full" aria-label="Grok Voice briefing" />}
       {!configured && (
         <p className="text-xs text-slate-400">
           {voice?.problem ?? 'Grok Voice is not configured.'}{' '}

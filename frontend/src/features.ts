@@ -3,6 +3,6 @@
 export const FEATURES = {
   nearMe: false,
   presentationKeys: false,
-  voice: false,
+  voice: true,
   gemma: true,
 }

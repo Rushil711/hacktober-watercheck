@@ -1,0 +1,28 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Runtime cache (filled by the app; see README "Offline demo")
+backend/cache/*
+!backend/cache/.gitkeep
+
+# Node
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# Project-local toolchain (Node.js runtime used when no system Node is installed)
+.tools/
+
+# OS / editor
+.DS_Store
+.idea/
+*.log

@@ -1,0 +1,11 @@
+[tool.ruff]
+line-length = 130
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "BLE"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["eval: live Gemma evaluation against tests/evals fixtures (needs GEMINI_API_KEY)"]
+addopts = "-m 'not eval'"

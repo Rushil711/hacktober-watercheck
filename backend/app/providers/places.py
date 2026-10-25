@@ -15,7 +15,7 @@ from ..net import client, get_json, haversine_km
 NOMINATIM = "https://nominatim.openstreetmap.org/search"
 OVERPASS = "https://overpass-api.de/api/interpreter"
 OSRM_TABLE = "https://router.project-osrm.org/table/v1/driving/"
-DEDUPE_KM = 0.25
+DEDUPE_KM = 1.0
 
 
 async def geocode(query: str) -> list[dict]:
@@ -65,14 +65,14 @@ async def water_spots(lat: float, lon: float, radius_km: float) -> list[dict]:
     """Named beaches and named cliffs within radius_km (cached per rounded center)."""
     key_lat, key_lon, radius_m = round(lat, 2), round(lon, 2), int(radius_km * 1000)
     query = (
-        f"[out:json][timeout:60];("
+        f"[out:json][timeout:25];("
         f'nwr["natural"="beach"]["name"](around:{radius_m},{key_lat},{key_lon});'
         f'nwr["natural"="cliff"]["name"](around:{radius_m},{key_lat},{key_lon});'
         f");out center tags;"
     )
 
     async def fetch() -> list[dict]:
-        resp = await client().post(OVERPASS, data={"data": query}, timeout=90.0)
+        resp = await client().post(OVERPASS, data={"data": query}, timeout=30.0)
         resp.raise_for_status()
         return parse_overpass(resp.json())
 

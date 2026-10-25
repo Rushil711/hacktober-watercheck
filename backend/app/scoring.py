@@ -92,8 +92,7 @@ def chlorophyll_block(days: list[DailyValue], receipt: Receipt, end_date: str, n
                 update={
                     "observed_at": latest.time,
                     "note": (
-                        f"Mean of {latest.valid} satellite cell(s) overlapping a "
-                        f"{C.OFFSHORE_BOX_KM:g} km box around the spot."
+                        f"Mean of {latest.valid} satellite cell(s) overlapping a {C.OFFSHORE_BOX_KM:g} km box around the spot."
                     ),
                 }
             ),

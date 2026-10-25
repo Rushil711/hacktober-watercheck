@@ -117,6 +117,11 @@ After each step, run the app and the tests. Do not mark a feature done if it is 
 ## 9. Run
 
 ```
-cd backend && pip install -r requirements.txt && uvicorn app.main:app --reload
+cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/uvicorn app.main:app --reload
 cd frontend && npm install && npm run dev
 ```
+
+Keys go in `backend/.env` (see `backend/.env.example`). If Node is not installed system-wide, put the project-local copy first on PATH:
+`export PATH="$PWD/.tools/node/bin:$PATH"` (run from the `water-check/` folder). Current progress and what is not done yet: `STATUS.md`.
+
+Note: the chlorophyll dataset named in section 3 (`noaacwNPPN20VIIRSchlociDaily`) stopped on 2021-09-02. After a metadata check, the app uses `noaacwN20VIIRSchlaDaily` (variable `chlor_a`).

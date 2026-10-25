@@ -11,8 +11,15 @@
   - Official status: the live San Diego County Beach & Bay feed (sdbeachinfo). It currently shows a **general rain advisory issued 2026-10-23** for both beaches. Matched stations: EH-320 "Vallecitos" for La Jolla Shores (0.09 km) and FM-090 "Black's Beach" (0.18 km).
   - Data age, Cached badges, partial-data warnings, halo, water-feel gauge, jump meter with the safety line, and the best-time strip (NOAA CO-OPS 9410230 tides plus NWS hourly).
   - Evidence receipts are attached to every number (source, dataset, observed time, fetched time, link). The popover renders, but the click was not exercised by automation.
+- **Map imagery, fixed 2026-10-25 4:20 PM.** The blur came from NASA GIBS NOAA-20 tiles, which exist only up to zoom 9 (about 250 m per pixel). Leaflet was stretching them up to zoom 18, and the opaque layer also hid the base map. Now:
+  - Zoom 10–16 shows USDA/USGS orthoimagery from The National Map (`USGSImageryOnly`, public domain, no key, native up to zoom 16).
+  - Zoom 9 and below shows the daily NOAA-20 pass.
+  - Every layer's `maxZoom` equals its native zoom, and the map stops at zoom 16.
+  - The chlorophyll WMS is remapped row by row from EPSG:4326 to Web Mercator. Checked by drawing ERDDAP's own coastline through the same code path over the imagery.
+  - Checked in headless Chrome at La Jolla Shores and Sunset Cliffs at zoom 16 (coastline legible) and at zoom 9 (daily layer).
 - **Search and beach picker.** `GET /api/search?q=La Jolla Shores` returns the Nominatim place plus nearby OpenStreetMap beaches. Tested through the Vite proxy; the click-through was not automated.
 - **Gemma card (hosted Gemma 4 `gemma-4-26b-a4b-it` via the Gemini API, the same integration as the old `server.py`).** Explanation, swim/jump verdicts, and best-hours reasons were generated live and validated with Pydantic. Checks: one retry on bad output, numbers must appear in the evidence, levels and labels must match the code's, and "safe" claims are rejected. On failure the card is hidden and the data stays.
+- **Grok Voice briefing (SpaceXSI track):** `POST /api/voice/briefing` was called live against xAI `POST /v1/tts`. It returned a 31-second MP3 (MPEG layer III, 24 kHz, 128 kbps) in 3.7 s. The spoken script is built by code from the report, with Gemma's headline included only when that card passed validation. The "Play Grok Voice briefing" button shows in the report, with a native audio player as fallback. Clicking it was not automated. The briefing turns on or off as soon as `XAI_API_KEY` in `backend/.env` changes, with no restart.
 - **Tests:** `pytest` passes 11 tests: ERDDAP metadata and grid parsing, stale data, missing data shown as "Unavailable", "no advisory found" vs. unverified, old BeachWatch records shown as unverified, bad Gemma JSON with retry then fallback, invented-number rejection, safe-claim rule, and unicode grounding.
 - **Key handling:** `backend/.env` is gitignored and was only appended to (missing variable names). No key values were written or printed. `XAI_API_KEY` loads and passes the format check (starts with `xai-`, no brackets or quotes).
 
@@ -22,13 +29,13 @@
 - **Gemma natural search** ("warm water within 30 min of UCSD"): `/api/gemma/search` is written but not verified. It is part of Feature 2, so it's hidden.
 - **Presentation mode (keys P and O) and the Live/Cached toggle:** code is written but turned off (`presentationKeys`). The badge always reads "Live".
 - **Offline / DEMO_MODE cache fill for the 3 demo beaches:** the cache layer works (it was used on every request), but the demo beaches were not pre-filled and offline mode was not tested. The `backend/cache/` folder is gitignored.
-- **Grok Voice briefing (required for the SpaceXSI track):** `/api/voice/status` and `/api/voice/briefing` (xAI `POST /v1/tts`) are built, and the key passes the format check. It has **not been called live yet**, so the button is hidden (`voice`).
 - **Drive ring and halo map for Feature 2:** built inside `MapView` but only visible in Near-me mode, which is hidden.
 - **Eval set** (`backend/tests/evals/`, 10 fixtures, `pytest -m eval`): the marker is configured in `pyproject.toml`, but there are no fixtures yet.
 - **Chlorophyll color lens:** the slider and the WMS proxy (EPSG:4326 per tile) are built. The chlorophyll overlay was not visually verified; near La Jolla it is mostly cloud gaps.
+- **Detail imagery limits:** USGS orthoimagery covers the US only; elsewhere the dark map shows at zoom 10+. It ends a few km offshore, where the service returns black. It is aerial imagery last refreshed June 2024, not same-day; the on-map legend says so. Same-day imagery is only the zoom ≤ 9 NOAA-20 layer.
 - **Overpass is slow:** the first search for a new place took about 82 s on the public server. It is now capped at 30 s and falls back to "check this exact point". Cached searches are instant.
 - **Known Gemma imprecision:** one explanation called the chlorophyll cell "5 km" (it is 4 km). This passes the number check because 5 km appears in the SST caveat.
-- **Human checks from the README:** confirm the 3 station matches, approve the thresholds in `backend/app/config.py`, and read Gemma output for 3 beaches.
+- **Human checks from the README:** confirm the 3 station matches (La Jolla Shores → EH-320 "Vallecitos" 0.09 km, Black's Beach → FM-090 0.18 km, Sunset Cliffs → PL-070 "Ladera Street" 0.72 km), approve the thresholds in `backend/app/config.py`, and read Gemma output for 3 beaches.
 - **Dataset change to confirm:** the README's `noaacwNPPN20VIIRSchlociDaily` ended 2021-09-02 (variable `chl_oci`). The app uses `noaacwN20VIIRSchlaDaily` (`chlor_a`, current). Confirm on the ERDDAP page.
 
 ## How to run

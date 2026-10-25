@@ -77,8 +77,15 @@ GIBS_TILE_TEMPLATE = (
     + GIBS_LAYER
     + "/default/{date}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpeg"
 )
-GIBS_MAX_ZOOM = 9
+GIBS_MAX_ZOOM = 9  # GIBS serves this layer only up to GoogleMapsCompatible_Level9 (~250 m/px)
 GIBS_MAX_DAYS_BACK = 3
+
+# Detail imagery for zoom 10-16: USDA/USGS orthoimagery from The National Map (public domain,
+# no key, US coverage). The tile cache stops at level 16 (1:9,028); level 17+ returns 404.
+ORTHO_TILE_TEMPLATE = "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}"
+ORTHO_MIN_ZOOM = 10
+ORTHO_MAX_ZOOM = 16
+ORTHO_ATTRIBUTION = "USDA, USGS The National Map: Orthoimagery"
 GIBS_EMPTY_DARK_FRACTION = 0.95
 
 # --- Measurement box and thresholds ---

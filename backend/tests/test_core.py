@@ -140,6 +140,20 @@ def test_safe_claims_flagged_but_negations_and_safety_allowed():
     assert not harness.unsafe_claims(["Jump safety: water feel only."])
 
 
+def test_wms_rows_are_remapped_to_mercator():
+    from app.tiles import TILE, mercator_source_rows, tile_bounds, tile_lat
+
+    z, y = 6, 25  # a low zoom tile, where lat/lon vs Mercator rows differ the most
+    south, _, north, _ = tile_bounds(z, 0, y)
+    rows = mercator_source_rows(z, y, 512)
+    assert rows[0] <= 2 and rows[-1] >= 509
+    mid_lat = tile_lat(z, y + 0.5)
+    expected_mid = int((north - mid_lat) / (north - south) * 512)
+    assert abs(rows[TILE // 2] - expected_mid) <= 2
+    assert expected_mid != 256  # a plain stretch would be wrong at this zoom
+    assert rows == sorted(rows)
+
+
 def test_unicode_labels_keep_numbers_grounded():
     allowed = harness.allowed_numbers(json.dumps({"label": "4 PM–6 PM"}, ensure_ascii=False))
     assert harness.ungrounded_numbers(["Best from 4 PM to 6 PM"], allowed) == []

@@ -67,7 +67,7 @@ export default function App() {
     api.voiceStatus().then(setVoice).catch(() => setVoice(null))
   }, [])
 
-  const openSpot = useCallback(async (target: SpotRef) => {
+  const openSpot = useCallback(async (target: SpotRef, zoomOverride?: number) => {
     reportAbort.current?.abort()
     const ctrl = new AbortController()
     reportAbort.current = ctrl
@@ -75,7 +75,7 @@ export default function App() {
     setSpot(target)
     setSearch(null)
     setCenter([target.lat, target.lon])
-    setZoom(11)
+    setZoom(Math.min(16, Math.max(3, zoomOverride ?? 14)))
     setReport(null)
     setReportError(null)
     setInsights(null)
@@ -110,8 +110,12 @@ export default function App() {
         const p = new URLSearchParams(window.location.search)
         const lat = Number(p.get('lat'))
         const lon = Number(p.get('lon'))
+        const zoomParam = Number(p.get('zoom'))
         if (p.has('lat') && p.has('lon') && Number.isFinite(lat) && Number.isFinite(lon)) {
-          openSpot({ name: p.get('name') ?? 'Selected spot', lat, lon, kind: p.get('kind') ?? 'beach' })
+          openSpot(
+            { name: p.get('name') ?? 'Selected spot', lat, lon, kind: p.get('kind') ?? 'beach' },
+            p.has('zoom') && Number.isInteger(zoomParam) ? zoomParam : undefined,
+          )
         }
       })
       .catch((e) => setBootError(`Backend not reachable: ${errMsg(e)}. Start it with uvicorn (see README).`))
@@ -389,11 +393,11 @@ export default function App() {
               value={lens}
               onChange={(e) => setLens(Number(e.target.value))}
               className="lens mt-2 w-full"
-              aria-label="Blend satellite photo and chlorophyll overlay"
+              aria-label="Blend imagery and chlorophyll overlay"
               disabled={!report?.chlorophyll.overlay_time}
             />
             <div className="mt-1 flex justify-between text-[10px] text-slate-400">
-              <span>Satellite photo</span>
+              <span>Imagery</span>
               <span>Chlorophyll</span>
             </div>
             {!report && <p className="mt-1 text-[10px] text-slate-500">Open a report to enable the chlorophyll layer.</p>}

@@ -82,6 +82,6 @@ export const api = {
   },
 }
 
-export function tileUrl(provider: 'base' | 'gibs' | 'chl', extra = ''): string {
+export function tileUrl(provider: 'base' | 'ortho' | 'gibs' | 'chl', extra = ''): string {
   return withOffline(`/api/tiles/${provider}/{z}/{x}/{y}${extra}`)
 }

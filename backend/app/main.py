@@ -66,6 +66,9 @@ async def app_config() -> dict:
         "chl_wms_layer": f"{C.CHL_DATASET.dataset_id}:{C.CHL_DATASET.variable}",
         "gibs_layer": C.GIBS_LAYER,
         "gibs_max_zoom": C.GIBS_MAX_ZOOM,
+        "ortho_min_zoom": C.ORTHO_MIN_ZOOM,
+        "ortho_max_zoom": C.ORTHO_MAX_ZOOM,
+        "ortho_attribution": C.ORTHO_ATTRIBUTION,
         "safety_line": C.JUMP_SAFETY_LINE,
         "max_km_per_min": C.MAX_KM_PER_MIN,
     }

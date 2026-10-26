@@ -32,7 +32,6 @@ Build this project in Cursor. The hackathon track requires it.
 |---|---|---|
 | Chlorophyll-a | NOAA CoastWatch ERDDAP, `noaacwNPPN20VIIRSchlociDaily` | Confirm the variable name in the metadata. Query a small box 1 to 2 km offshore. |
 | Sea surface temperature | NOAA CoastWatch ERDDAP, search "geo-polar blended SST" | Confirm the dataset ID and units. |
-| Chlorophyll color overlay | ERDDAP WMS for the same chlorophyll dataset | This is the "color areas of good water" visual. |
 | Satellite photo layer | NASA GIBS, `VIIRS_NOAA20_CorrectedReflectance_TrueColor` | No key. Use yesterday's date if today is empty. |
 | Official advisories | California SWRCB BeachWatch (data.ca.gov), San Diego County beach program | Match by station. If no match, show "Unverified". |
 | Tides (best time of day) | NOAA CO-OPS API, La Jolla station 9410230 | Hourly tide curve. |
@@ -65,7 +64,6 @@ Cache every response in `backend/cache/` as JSON with a fetch time. Add `DEMO_MO
 - **Jump meter:** a vertical bar that fills from water feel and tide. Always show the safety line under it.
 - **Best-time strip:** a 24-hour bar with the tide curve and air temperature. The best window glows.
 - **Evidence receipts:** a click on any number opens a small receipt: source, dataset, observation time, link.
-- **Color lens:** a slider between the satellite photo and the chlorophyll overlay.
 - **Drive ring:** a soft ring on the map that grows with the drive-time control.
 - **Presentation mode:** key `P` cycles through 3 preset beaches (La Jolla Shores, Black's Beach, Sunset Cliffs). Key `O` turns on offline mode. A "Live" or "Cached" badge sits in the top corner.
 - Every view needs a loading state, an empty state, and an error state.

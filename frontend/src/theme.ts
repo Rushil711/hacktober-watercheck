@@ -16,6 +16,7 @@ export const theme = {
   water: '#38bdf8',
   waterLine: '#7dd3fc',
   sand: '#f5deb3', // pale, so beaches do not look like an amber halo
+  noData: '#e2e8f0', // water bodies without a report (3.9:1 on gray imagery)
 }
 
 // Map and list color for a water body kind from /api/nearby.

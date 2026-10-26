@@ -65,7 +65,7 @@ function OfficialCard({ report }: { report: BeachReport }) {
           </ul>
         )}
       </div>
-      <p className="mt-2 text-[11px] text-slate-500">This status comes from the water-quality service. Gemma never sets it.</p>
+      <p className="mt-2 text-xs text-slate-400">This status comes from the water-quality service. Gemma never sets it.</p>
     </Card>
   )
 }
@@ -76,7 +76,7 @@ function ExplainCard({ insights, loading, error }: { insights: Insights | null; 
     <Card
       title="Gemma explains the evidence"
       icon={<Sparkles size={14} />}
-      right={explain?.ok ? <span className="text-[10px] text-slate-400">{explain.model}{explain.cached ? ' · cached' : ''}</span> : null}
+      right={explain?.ok ? <span className="text-xs text-slate-400">{explain.model}{explain.cached ? ' · cached' : ''}</span> : null}
     >
       {loading && <Loading label="Gemma is reading the evidence…" />}
       {error && !loading && <ErrorBox message={error} />}
@@ -95,7 +95,7 @@ function ExplainCard({ insights, loading, error }: { insights: Insights | null; 
           ).map(([title, items]) =>
             items.length ? (
               <div key={title}>
-                <p className="text-[11px] font-semibold tracking-wider text-teal-200/80 uppercase">{title}</p>
+                <p className="text-xs font-semibold tracking-wider text-teal-200/80 uppercase">{title}</p>
                 <ul className="mt-1 list-disc space-y-0.5 pl-5 text-slate-300">
                   {items.map((t, i) => (
                     <li key={i}>{t}</li>
@@ -105,7 +105,7 @@ function ExplainCard({ insights, loading, error }: { insights: Insights | null; 
             ) : null,
           )}
           {explain.data.sources_used.length > 0 && (
-            <p className="text-xs text-slate-500">Sources: {explain.data.sources_used.join(' · ')}</p>
+            <p className="text-xs text-slate-400">Sources: {explain.data.sources_used.join(' · ')}</p>
           )}
         </motion.div>
       )}
@@ -211,9 +211,9 @@ export default function ReportPanel({ report, insights, insightsLoading, insight
       <div className="grid gap-3 md:grid-cols-2">
         <Card title="Water feel · swimming" icon={<Thermometer size={14} />} right={<CachedBadge cached={report.sea_temp.current.receipt.cached} />}>
           <FeelGauge feel={report.feel} sst={report.sea_temp} />
-          <p className="mt-3 text-[11px] text-slate-400">{report.sea_temp.caveat}</p>
+          <p className="mt-3 text-xs text-slate-400">{report.sea_temp.caveat}</p>
           {report.sea_temp.current.receipt.observed_at && (
-            <p className="text-[11px] text-slate-500">Observed {fmtTime(report.sea_temp.current.receipt.observed_at)}</p>
+            <p className="text-xs text-slate-400">Observed {fmtTime(report.sea_temp.current.receipt.observed_at)}</p>
           )}
           {verdicts?.ok && verdicts.data && (
             <p className="mt-2 rounded-lg bg-teal-400/10 p-2 text-sm text-teal-50">
@@ -241,11 +241,11 @@ export default function ReportPanel({ report, insights, insightsLoading, insight
               <span className="text-4xl font-bold text-white">{chl.current.display}</span>
               {chl.current.value !== null && <span className="ml-1 text-sm text-slate-300">mg/m³</span>}
             </ReceiptButton>
-            <p className="text-[11px] tracking-wide text-slate-400 uppercase">
+            <p className="text-xs tracking-wide text-slate-400 uppercase">
               Level: {chl.level} · trend: {chl.trend_direction}
             </p>
             {chl.current.receipt.observed_at && (
-              <p className={`text-[11px] ${chl.stale ? 'font-semibold text-amber-300' : 'text-slate-500'}`}>
+              <p className={`text-xs ${chl.stale ? 'font-semibold text-amber-300' : 'text-slate-400'}`}>
                 Observed {fmtTime(chl.current.receipt.observed_at)}
                 {chl.age_days !== null && ` · ${chl.age_days.toFixed(1)} days old`}
                 {chl.stale && ' · stale'}
@@ -256,7 +256,7 @@ export default function ReportPanel({ report, insights, insightsLoading, insight
         <div className="mt-2">
           <ChlTrend trend={chl.trend} />
         </div>
-        <p className="mt-2 text-[11px] text-slate-400">{chl.caveat}</p>
+        <p className="mt-2 text-xs text-slate-400">{chl.caveat}</p>
       </Card>
 
       <Card
@@ -264,7 +264,7 @@ export default function ReportPanel({ report, insights, insightsLoading, insight
         icon={<Sun size={14} />}
         right={
           report.best_time.tide_receipt ? (
-            <ReceiptButton receipt={report.best_time.tide_receipt} className="text-[11px] text-slate-400">
+            <ReceiptButton receipt={report.best_time.tide_receipt} className="text-xs text-slate-400">
               <Waves size={12} className="mr-1 inline" />
               Tide: {report.best_time.tide_station?.name ?? 'Unavailable'}
             </ReceiptButton>
@@ -289,7 +289,7 @@ export default function ReportPanel({ report, insights, insightsLoading, insight
           ))}
           {best && !best.ok && <GemmaUnavailable result={best} />}
           {report.best_time.weather_receipt && (
-            <ReceiptButton receipt={report.best_time.weather_receipt} className="text-[11px] text-slate-500">
+            <ReceiptButton receipt={report.best_time.weather_receipt} className="text-xs text-slate-400">
               Air temperature and sky: NWS hourly forecast
             </ReceiptButton>
           )}

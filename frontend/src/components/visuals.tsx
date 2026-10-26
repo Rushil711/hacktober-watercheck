@@ -61,7 +61,7 @@ export function FeelGauge({ feel, sst }: { feel: Feel; sst: SeaTempBlock }) {
           <span className="text-5xl font-bold tracking-tight text-white">{sst.current.display}</span>
           {sst.current.value !== null && <span className="ml-1 text-lg text-slate-300">°F</span>}
         </ReceiptButton>
-        <p className="text-[11px] tracking-wide text-slate-400 uppercase">Satellite sea surface temp</p>
+        <p className="text-xs tracking-wide text-slate-400 uppercase">Satellite sea surface temp</p>
       </div>
       <div className="mt-2 flex items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-xs text-slate-200">
         <Shirt size={14} className="text-teal-300" />
@@ -94,7 +94,7 @@ export function JumpMeter({ feel }: { feel: Feel }) {
       <div className="flex flex-1 flex-col justify-between">
         <div>
           <p className="text-4xl font-bold text-white">{pct === null ? 'Unavailable' : `${pct}`}</p>
-          <p className="text-[11px] tracking-wide text-slate-400 uppercase">Jump meter (water feel + tide)</p>
+          <p className="text-xs tracking-wide text-slate-400 uppercase">Jump meter (water feel + tide)</p>
           <p className="mt-2 text-sm text-slate-200">{feel.jump_label}</p>
           <p className="text-xs text-slate-400">
             Tide now: {feel.tide_now_ft === null ? 'Unavailable' : `${feel.tide_now_ft.toFixed(1)} ft MLLW`}
@@ -154,7 +154,7 @@ export function BestTimeStrip({ best }: { best: BestTime }) {
           />
         ))}
       </div>
-      <div className="mt-1 flex justify-between text-[10px] text-slate-500">
+      <div className="mt-1 flex justify-between text-xs text-slate-400">
         <span>12 AM</span>
         <span>Daylight shown in sand, best window glows</span>
         <span>11 PM</span>

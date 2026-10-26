@@ -78,7 +78,6 @@ def chlorophyll_block(days: list[DailyValue], receipt: Receipt, end_date: str, n
                 receipt=receipt.model_copy(update={"note": "No cloud-free pixels near this spot in the lookback window."}),
             ),
             trend=trend,
-            overlay_time=end_date,
         )
     age = age_days(latest.time, now)
     value = round(latest.mean, 2)
@@ -103,7 +102,6 @@ def chlorophyll_block(days: list[DailyValue], receipt: Receipt, end_date: str, n
         age_days=age,
         stale=age > C.CHL_STALE_DAYS,
         pixels_used=latest.valid,
-        overlay_time=latest.time,
     )
 
 

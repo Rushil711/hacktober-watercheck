@@ -4,8 +4,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { Circle, CircleMarker, GeoJSON, MapContainer, Marker, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet'
 import { tileUrl } from '../api'
 import { kmToMi } from '../format'
+import { Info } from 'lucide-react'
 import { kindColor, theme } from '../theme'
-import type { Geometry } from 'geojson'
 import type { Halo, WaterBody } from '../types'
 import { HaloIcon } from './common'
 
@@ -24,16 +24,14 @@ export interface SearchCircle {
   km: number
 }
 
-// Where the map flies: a point and zoom, the search circle, or one water body's outline.
-export type MapTarget = { center: [number, number]; zoom: number } | { circle: SearchCircle } | { geometry: Geometry }
+// Where the map flies: a point and zoom, or the bounds of the search circle.
+export type MapTarget = { center: [number, number]; zoom: number } | { circle: SearchCircle }
 
 interface Props {
   target: MapTarget
   spots: MapSpot[]
   selectedId: string | null
   gibsDate: string | null
-  chlTime: string | null
-  lens: number
   scanning: boolean
   offline: boolean
   circle: SearchCircle | null
@@ -61,7 +59,7 @@ function haloIcon(halo: Halo | null, selected: boolean): L.DivIcon {
     iconSize: [34, 34],
     iconAnchor: [17, 17],
     html: `<div class="halo-marker${selected ? ' selected' : ''}" role="img" aria-label="${halo?.label ?? 'Status unknown'}">
-      <span class="ring" style="background:${color}55;box-shadow:0 0 22px ${color}"></span>
+      <span class="ring" style="background:${color}55"></span>
       <span class="core" style="background:${color};color:${color}"><span style="color:#06142b;display:grid;place-items:center">${inner}</span></span>
     </div>`,
   })
@@ -72,9 +70,9 @@ function FlyTo({ target }: { target: MapTarget }) {
   useEffect(() => {
     if ('circle' in target) {
       const { lat, lon, km } = target.circle
-      map.flyToBounds(L.latLng(lat, lon).toBounds(km * 2000), { padding: [24, 24], duration: 1.1 })
-    } else if ('geometry' in target) {
-      map.flyToBounds(L.geoJSON(target.geometry).getBounds(), { padding: [48, 48], maxZoom: 15, duration: 1.1 })
+      // On a phone the bottom sheet covers the lower 40% of the map, so keep the circle above it.
+      const sheet = window.innerWidth < 1024 ? Math.round(map.getSize().y * 0.4) : 0
+      map.flyToBounds(L.latLng(lat, lon).toBounds(km * 2000), { paddingTopLeft: [24, 24], paddingBottomRight: [24, 24 + sheet], duration: 1.1 })
     } else {
       map.flyTo(target.center, target.zoom, { duration: 1.1 })
     }
@@ -82,35 +80,47 @@ function FlyTo({ target }: { target: MapTarget }) {
   return null
 }
 
-function ClickCatcher({ onMapClick, onZoom }: { onMapClick?: (lat: number, lon: number) => void; onZoom: (z: number) => void }) {
-  const map = useMapEvents({
+function ClickCatcher({ onMapClick }: { onMapClick?: (lat: number, lon: number) => void }) {
+  useMapEvents({
     click(e) {
       onMapClick?.(e.latlng.lat, e.latlng.lng)
-    },
-    zoomend() {
-      onZoom(map.getZoom())
     },
   })
   return null
 }
 
-function ImageryLegend({ zoom, gibsDate }: { zoom: number; gibsDate: string | null }) {
-  const daily = zoom <= GIBS_NATIVE_MAX
+const CREDITS: { label: string; href: string }[] = [
+  { label: 'Base: NASA Blue Marble (GIBS)', href: 'https://earthdata.nasa.gov/gibs' },
+  { label: 'Aerial photo: USDA, USGS The National Map', href: 'https://www.usgs.gov/programs/national-geospatial-program/national-map' },
+  { label: 'Daily pass: NASA GIBS, NOAA-20 VIIRS', href: 'https://earthdata.nasa.gov/gibs' },
+  { label: 'Places: OpenStreetMap contributors (ODbL)', href: 'https://www.openstreetmap.org/copyright' },
+  { label: 'Map library: Leaflet', href: 'https://leafletjs.com' },
+]
+
+function Credits() {
+  const [open, setOpen] = useState(false)
   return (
-    <div className="glass-strong pointer-events-none absolute top-3 left-3 z-[600] max-w-[300px] rounded-xl px-3 py-2 text-[11px] leading-snug text-slate-200">
-      <p className="font-semibold text-teal-100">
-        Imagery at zoom {zoom}: {daily ? 'daily satellite pass' : 'detail orthoimagery'}
-      </p>
-      {daily ? (
-        <p className="text-slate-300">
-          NOAA-20 VIIRS true color{gibsDate ? `, ${gibsDate}` : ' (unavailable)'} · NASA GIBS · about 250 m per pixel. Zoom in past{' '}
-          {GIBS_NATIVE_MAX} for detail.
-        </p>
-      ) : (
-        <p className="text-slate-300">
-          USDA/USGS aerial orthoimagery (The National Map, refreshed June 2024), not today's. Zoom out to {GIBS_NATIVE_MAX} or
-          less for the daily NOAA-20 pass. Max zoom {ORTHO_NATIVE_MAX}.
-        </p>
+    <div className="absolute top-3 right-3 z-[650] flex flex-col items-end gap-2">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-controls="map-credits"
+        aria-label="Map credits"
+        className="glass-strong grid h-9 w-9 place-items-center rounded-full text-slate-100 hover:bg-white/10"
+      >
+        <Info size={16} aria-hidden />
+      </button>
+      {open && (
+        <ul id="map-credits" className="glass-strong w-64 space-y-1 rounded-xl p-3 text-xs leading-5">
+          {CREDITS.map((c) => (
+            <li key={c.label}>
+              <a href={c.href} target="_blank" rel="noreferrer" className="text-teal-200 underline-offset-2 hover:underline">
+                {c.label}
+              </a>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   )
@@ -149,7 +159,12 @@ function RadiusRing({ lat, lon, km }: SearchCircle) {
   )
 }
 
-function shapeStyle(kind: string, highlighted: boolean): L.PathOptions {
+function shapeStyle(kind: string, highlighted: boolean, hasData: boolean): L.PathOptions {
+  if (!hasData) {
+    // No data: gray and dashed, so it reads as not clickable
+    const line = { color: theme.noData, weight: kind === 'river' ? 3 : 1.5, opacity: 0.8, dashArray: '4 4' }
+    return kind === 'river' ? line : { ...line, fillColor: theme.noData, fillOpacity: 0.25 }
+  }
   const color = kindColor(kind)
   if (kind === 'river') {
     return { color: highlighted ? '#ffffff' : color, weight: highlighted ? 6 : 4, opacity: 0.95 }
@@ -163,14 +178,25 @@ function shapeStyle(kind: string, highlighted: boolean): L.PathOptions {
   }
 }
 
+// Adds the no-data class (not-allowed cursor) to every path. A river with several segments is a nested group.
+function markNoData(layer: L.Layer) {
+  if (layer instanceof L.LayerGroup) layer.eachLayer(markNoData)
+  else if (layer instanceof L.Path) layer.getElement()?.classList.add('no-data')
+}
+
 function WaterShape({ body, highlighted, onClick, onHover }: { body: WaterBody; highlighted: boolean; onClick: () => void; onHover: (on: boolean) => void }) {
-  const style = useMemo(() => shapeStyle(body.kind, highlighted), [body.kind, highlighted])
+  const hasData = body.report_available
+  const style = useMemo(() => shapeStyle(body.kind, highlighted, hasData), [body.kind, highlighted, hasData])
   return (
     <GeoJSON
       data={body.geometry}
       style={style}
       pointToLayer={(_, latlng) => L.circleMarker(latlng, { radius: 7 })}
-      eventHandlers={{ click: onClick, mouseover: () => onHover(true), mouseout: () => onHover(false) }}
+      eventHandlers={
+        hasData
+          ? { click: onClick, mouseover: () => onHover(true), mouseout: () => onHover(false) }
+          : { add: (e) => markNoData(e.target as L.Layer) }
+      }
     >
       <Tooltip sticky>
         <div className="text-xs">
@@ -178,7 +204,14 @@ function WaterShape({ body, highlighted, onClick, onHover }: { body: WaterBody; 
           <div>
             {body.kind} · {kmToMi(body.distance_km)} mi away
           </div>
-          {body.halo && <div>{body.halo.label}</div>}
+          {hasData ? (
+            <>
+              {body.halo && <div>{body.halo.label}</div>}
+              <div className="font-semibold">Click to open the report</div>
+            </>
+          ) : (
+            <div className="font-semibold">No data. Cannot open a report.</div>
+          )}
         </div>
       </Tooltip>
     </GeoJSON>
@@ -186,27 +219,23 @@ function WaterShape({ body, highlighted, onClick, onHover }: { body: WaterBody; 
 }
 
 export default function MapView(props: Props) {
-  const { target, spots, selectedId, gibsDate, chlTime, lens, scanning, offline, circle, origin, water, highlightId } = props
+  const { target, spots, selectedId, gibsDate, scanning, offline, circle, origin, water, highlightId } = props
   const { onSpotClick, onWaterClick, onWaterHover, onMapClick } = props
   const baseUrl = tileUrl('base')
   const orthoUrl = tileUrl('ortho')
   const gibsUrl = gibsDate ? tileUrl('gibs', `?date=${gibsDate}`) : null
-  const chlUrl = chlTime ? tileUrl('chl', `?date=${encodeURIComponent(chlTime)}`) : null
   const [start] = useState(() => ('center' in target ? target : { center: [32.8, -117.25] as [number, number], zoom: 11 }))
-  const [viewZoom, setViewZoom] = useState(start.zoom)
-  const imageryOpacity = 1 - lens * 0.55
   const icons = useMemo(
     () => new Map(spots.map((s) => [s.id, haloIcon(s.halo, s.id === selectedId)])),
     [spots, selectedId],
   )
 
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-2xl">
-      <MapContainer center={start.center} zoom={start.zoom} minZoom={3} maxZoom={MAP_MAX_ZOOM} className="h-full w-full" zoomControl={false} worldCopyJump>
+    <div className="relative h-full w-full overflow-hidden lg:rounded-2xl">
+      <MapContainer center={start.center} zoom={start.zoom} minZoom={3} maxZoom={MAP_MAX_ZOOM} className="h-full w-full" zoomControl={false} attributionControl={false} worldCopyJump>
         <TileLayer
           key={`base-${offline}`}
           url={baseUrl}
-          attribution='Base: <a href="https://earthdata.nasa.gov/gibs">NASA Blue Marble</a>'
           maxZoom={MAP_MAX_ZOOM}
         />
         <TileLayer
@@ -215,8 +244,6 @@ export default function MapView(props: Props) {
           minZoom={ORTHO_MIN}
           maxNativeZoom={ORTHO_NATIVE_MAX}
           maxZoom={ORTHO_NATIVE_MAX}
-          opacity={imageryOpacity}
-          attribution='Orthoimagery: <a href="https://www.usgs.gov/programs/national-geospatial-program/national-map">USDA, USGS The National Map</a>'
         />
         {gibsUrl && (
           <TileLayer
@@ -224,23 +251,13 @@ export default function MapView(props: Props) {
             url={gibsUrl}
             maxNativeZoom={GIBS_NATIVE_MAX}
             maxZoom={GIBS_NATIVE_MAX}
-            opacity={imageryOpacity}
-            attribution='Daily imagery: <a href="https://earthdata.nasa.gov/gibs">NASA GIBS</a> (NOAA-20 VIIRS)'
-          />
-        )}
-        {chlUrl && lens > 0.02 && (
-          <TileLayer
-            key={`chl-${chlTime}-${offline}`}
-            url={chlUrl}
-            maxZoom={MAP_MAX_ZOOM}
-            opacity={lens}
-            attribution='Chlorophyll: <a href="https://coastwatch.noaa.gov/erddap/">NOAA CoastWatch ERDDAP</a>'
-          />
+            />
         )}
         <FlyTo target={target} />
-        <ClickCatcher onMapClick={onMapClick} onZoom={setViewZoom} />
+        <ClickCatcher onMapClick={onMapClick} />
         {circle && <RadiusRing lat={circle.lat} lon={circle.lon} km={circle.km} />}
-        {water.map((b) => (
+        {/* No-data shapes first, so shapes with data sit on top and get the clicks */}
+        {[...water].sort((a, b) => Number(a.report_available) - Number(b.report_available)).map((b) => (
           <WaterShape
             key={b.id}
             body={b}
@@ -273,11 +290,11 @@ export default function MapView(props: Props) {
           </Marker>
         ))}
       </MapContainer>
-      <ImageryLegend zoom={viewZoom} gibsDate={gibsDate} />
+      <Credits />
       {scanning && (
         <div className="pointer-events-none absolute inset-0 z-[500]">
           <div className="scan-line" />
-          <div className="glass-strong absolute top-3 left-1/2 -translate-x-1/2 rounded-full px-3 py-1 text-[11px] font-semibold tracking-widest text-teal-100 uppercase">
+          <div className="glass-strong absolute top-3 left-1/2 hidden -translate-x-1/2 rounded-full lg:block px-3 py-1 text-xs font-semibold tracking-widest text-teal-100 uppercase">
             NOAA-20 pass
           </div>
         </div>

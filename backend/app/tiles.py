@@ -6,9 +6,6 @@
 - gibs:  NASA GIBS NOAA-20 daily true color; native zoom <= 9 (about 250 m per pixel)
 - fill:  NASA Blue Marble (static, global, native zoom <= 8). Not served alone: it fills the
          blank pixels of ortho and gibs tiles, so the map never shows white or black gaps.
-- chl:   ERDDAP WMS chlorophyll overlay. The WMS only offers EPSG:4326, so each
-         Web Mercator tile is fetched by its lat/lon bounds and its rows are
-         remapped to Mercator so the overlay lines up with the imagery.
 """
 
 from __future__ import annotations
@@ -29,7 +26,6 @@ from .net import client
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _TIME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}Z)?$")
 TILE = 256
-WMS_SRC_HEIGHT = 512  # extra source rows so the Mercator remap stays sub-pixel
 
 
 def _empty_png() -> bytes:
@@ -49,48 +45,6 @@ def tile_lat(z: int, yy: float) -> float:
 def tile_bounds(z: int, x: int, y: int) -> tuple[float, float, float, float]:
     n = 2**z
     return tile_lat(z, y + 1), x / n * 360 - 180, tile_lat(z, y), (x + 1) / n * 360 - 180
-
-
-def mercator_source_rows(z: int, y: int, src_height: int) -> list[int]:
-    """For each output row of a Web Mercator tile, the matching row of a lat/lon image of the same bounds."""
-    south, _, north, _ = tile_bounds(z, 0, y)
-    rows = []
-    for j in range(TILE):
-        lat = tile_lat(z, y + (j + 0.5) / TILE)
-        r = int((north - lat) / (north - south) * src_height)
-        rows.append(min(max(r, 0), src_height - 1))
-    return rows
-
-
-def reproject_to_mercator(png_4326: bytes, z: int, y: int) -> bytes:
-    src = Image.open(io.BytesIO(png_4326)).convert("RGBA")
-    if src.width != TILE:
-        src = src.resize((TILE, src.height), Image.Resampling.NEAREST)
-    out = Image.new("RGBA", (TILE, TILE), (0, 0, 0, 0))
-    for j, r in enumerate(mercator_source_rows(z, y, src.height)):
-        out.paste(src.crop((0, r, TILE, r + 1)), (0, j))
-    buf = io.BytesIO()
-    out.save(buf, "PNG", optimize=True)
-    return buf.getvalue()
-
-
-def wms_params(layer: str, z: int, x: int, y: int, time: str | None) -> dict:
-    south, west, north, east = tile_bounds(z, x, y)
-    return {
-        "service": "WMS",
-        "request": "GetMap",
-        "version": "1.3.0",
-        "layers": layer,
-        "styles": "",
-        "crs": "EPSG:4326",
-        "bbox": f"{south:.8f},{west:.8f},{north:.8f},{east:.8f}",
-        "width": str(TILE),
-        "height": str(WMS_SRC_HEIGHT),
-        "format": "image/png",
-        "transparent": "true",
-        "elevation": "0.0",
-        **({"time": time if "T" in time else f"{time}T12:00:00Z"} if time else {}),
-    }
 
 
 async def fill_tile(z: int, x: int, y: int) -> Image.Image:
@@ -172,21 +126,10 @@ async def tile(provider: str, z: int, x: int, y: int, date: str | None = None) -
         if not date or not _DATE_RE.match(date) or z > C.GIBS_MAX_ZOOM:
             raise HTTPException(status_code=400, detail=f"gibs tiles need ?date=YYYY-MM-DD and z <= {C.GIBS_MAX_ZOOM}")
         url = C.GIBS_TILE_TEMPLATE.format(date=date, z=z, y=y, x=x)
-    elif provider == "chl":
-        if date and not _TIME_RE.match(date):
-            raise HTTPException(status_code=400, detail="Bad time")
-        url = f"{C.ERDDAP_BASE}/wms/{C.CHL_DATASET.dataset_id}/request"
-        params = wms_params(f"{C.CHL_DATASET.dataset_id}:{C.CHL_DATASET.variable}", z, x, y, date)
     else:
         raise HTTPException(status_code=404, detail="Unknown tile provider")
 
-    if provider == "chl":
-
-        async def fetch() -> tuple[bytes, str]:
-            content, _ = await _fetch(url, params)
-            return reproject_to_mercator(content, z, y), "image/png"
-
-    elif provider in ("ortho", "gibs"):
+    if provider in ("ortho", "gibs"):
 
         async def fetch() -> tuple[bytes, str]:
             content, _ = await _fetch(url, params)

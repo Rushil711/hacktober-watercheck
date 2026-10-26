@@ -53,7 +53,6 @@ class ChlorophyllBlock(BaseModel):
     age_days: float | None = None
     stale: bool = False
     pixels_used: int = 0
-    overlay_time: str | None = None
     caveat: str = "High chlorophyll does not prove a harmful bloom. Low chlorophyll does not prove safe water."
 
 

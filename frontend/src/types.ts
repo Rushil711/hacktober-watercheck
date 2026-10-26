@@ -48,7 +48,6 @@ export interface ChlorophyllBlock {
   age_days: number | null
   stale: boolean
   pixels_used: number
-  overlay_time: string | null
   caveat: string
 }
 

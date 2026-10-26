@@ -182,7 +182,3 @@ def age_days(time_iso: str, now: datetime | None = None) -> float:
 
 def dataset_page(ds: GridDataset) -> str:
     return f"{ERDDAP_BASE}/griddap/{ds.dataset_id}.html"
-
-
-def wms_url(ds: GridDataset) -> str:
-    return f"{ERDDAP_BASE}/wms/{ds.dataset_id}/request"

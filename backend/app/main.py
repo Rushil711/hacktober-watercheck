@@ -64,8 +64,6 @@ async def app_config() -> dict:
         "nearby_max_mi": C.NEARBY_MAX_MI,
         "chl_dataset": C.CHL_DATASET.dataset_id,
         "chl_variable": C.CHL_DATASET.variable,
-        "chl_wms_url": f"{C.ERDDAP_BASE}/wms/{C.CHL_DATASET.dataset_id}/request",
-        "chl_wms_layer": f"{C.CHL_DATASET.dataset_id}:{C.CHL_DATASET.variable}",
         "gibs_layer": C.GIBS_LAYER,
         "gibs_max_zoom": C.GIBS_MAX_ZOOM,
         "ortho_min_zoom": C.ORTHO_MIN_ZOOM,

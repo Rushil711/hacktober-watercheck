@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowLeft, Layers, MapPin, Ruler, Search, Sparkles, Waves, Wifi, WifiOff } from 'lucide-react'
+import { ArrowLeft, MapPin, Ruler, Search, Sparkles, Waves, Wifi, WifiOff } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { api, setOffline as setApiOffline } from './api'
 import { ErrorBox, Loading } from './components/common'
@@ -40,7 +40,7 @@ export default function App() {
   const [insightsError, setInsightsError] = useState<string | null>(null)
 
   const [target, setTarget] = useState<MapTarget>({ center: DEFAULT_CENTER, zoom: 11 })
-  const [lens, setLens] = useState(0)
+  const [sheetOpen, setSheetOpen] = useState(false) // phone bottom sheet
 
   const [address, setAddress] = useState('')
   const [radiusInput, setRadiusInput] = useState('')
@@ -66,6 +66,7 @@ export default function App() {
     const ctrl = new AbortController()
     reportAbort.current = ctrl
     setMode('spot')
+    setSheetOpen(true)
     setSpot(target)
     setTarget({ center: [target.lat, target.lon], zoom: Math.min(16, Math.max(3, zoomOverride ?? 14)) })
     setReport(null)
@@ -161,10 +162,11 @@ export default function App() {
     runNearby(addr, radiusMi)
   }
 
+  // Only water bodies with data are clickable (list rows and map shapes).
   const selectWater = (b: WaterBody) => {
+    if (!b.report_available) return
     setSelectedWaterId(b.id)
-    if (b.report_available) openSpot({ name: b.name, lat: b.lat, lon: b.lon, kind: b.kind }, 13)
-    else setTarget({ geometry: b.geometry })
+    openSpot({ name: b.name, lat: b.lat, lon: b.lon, kind: b.kind }, 13)
   }
 
   const backToResults = () => {
@@ -214,19 +216,19 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex flex-wrap items-center gap-3 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <div className="grid h-9 w-9 place-items-center rounded-xl bg-teal-400/20 text-teal-200">
-            <Waves size={20} />
+      <header className="flex items-center gap-2 px-3 py-2 sm:gap-3 sm:px-4 sm:py-3">
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="grid h-9 w-9 place-items-center rounded-xl bg-teal-400/15 text-teal-200">
+            <Waves size={20} aria-hidden />
           </div>
-          <div>
-            <h1 className="text-lg leading-none font-bold text-white">WaterCheck</h1>
-            <p className="text-[11px] text-slate-400">Satellite + official data · explained by Gemma</p>
+          <div className="sr-only md:not-sr-only">
+            <h1 className="text-xl leading-6 font-bold text-white">WaterCheck</h1>
+            <p className="text-xs text-slate-300">Satellite + official data · explained by Gemma</p>
           </div>
         </div>
-        <form onSubmit={submitNearby} className="flex min-w-[280px] flex-1 flex-wrap items-center gap-2">
-          <div className="relative min-w-[220px] flex-[3]">
-            <MapPin size={15} className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
+        <form onSubmit={submitNearby} className="flex min-w-0 flex-1 items-center gap-2" role="search">
+          <div className="relative min-w-0 flex-1">
+            <MapPin size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-300" aria-hidden />
             <input
               value={address}
               onChange={(e) => setAddress(e.target.value)}
@@ -234,12 +236,12 @@ export default function App() {
               minLength={2}
               maxLength={200}
               placeholder="Enter a starting address"
-              className="w-full rounded-xl bg-white/10 py-2 pr-3 pl-9 text-sm placeholder:text-slate-500 focus:ring-2 focus:ring-teal-300 focus:outline-none"
+              className="h-10 w-full rounded-xl bg-white/10 pr-3 pl-9 text-sm placeholder:text-slate-400 focus:ring-2 focus:ring-teal-300 focus:outline-none"
               aria-label="Starting address"
             />
           </div>
-          <div className="relative w-52 flex-none">
-            <Ruler size={15} className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
+          <div className="relative w-24 shrink-0 sm:w-40">
+            <Ruler size={15} className="pointer-events-none absolute top-1/2 left-3 hidden -translate-y-1/2 text-slate-300 sm:block" aria-hidden />
             <input
               type="number"
               inputMode="decimal"
@@ -249,53 +251,55 @@ export default function App() {
               required
               value={radiusInput}
               onChange={(e) => setRadiusInput(e.target.value)}
-              placeholder="Radius in miles"
+              placeholder="Radius"
               title={`Search radius: ${minMi} to ${maxMi} miles`}
-              className="w-full rounded-xl bg-white/10 py-2 pr-9 pl-9 text-sm placeholder:text-slate-500 focus:ring-2 focus:ring-teal-300 focus:outline-none"
+              className="h-10 w-full rounded-xl bg-white/10 pr-8 pl-3 text-sm placeholder:text-slate-400 focus:ring-2 focus:ring-teal-300 focus:outline-none sm:pl-9"
               aria-label="Search radius in miles"
             />
-            <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-xs text-slate-400">mi</span>
+            <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-xs text-slate-300" aria-hidden>
+              mi
+            </span>
           </div>
           <button
             type="submit"
             disabled={nearbyLoading}
-            className="flex items-center gap-1.5 rounded-xl bg-teal-400 px-4 py-2 text-sm font-semibold text-navy-900 hover:bg-teal-300 disabled:opacity-60"
+            aria-label="Search nearby"
+            className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-teal-400 px-3 text-sm font-semibold text-navy-900 hover:bg-teal-300 disabled:opacity-60 sm:px-4"
           >
-            <Search size={15} /> Search nearby
+            <Search size={16} aria-hidden /> <span className="hidden sm:inline">Search nearby</span>
           </button>
         </form>
-        <div className="flex items-center gap-2 text-xs">
+        <div className="hidden items-center gap-2 text-xs lg:flex">
           <span
             className={`flex items-center gap-1 rounded-full px-2.5 py-1 font-semibold ${statusBadge ? 'bg-amber-400/20 text-amber-200' : 'bg-emerald-400/15 text-emerald-200'}`}
             title="Key O toggles offline mode"
           >
-            {statusBadge ? <WifiOff size={13} /> : <Wifi size={13} />}
+            {statusBadge ? <WifiOff size={13} aria-hidden /> : <Wifi size={13} aria-hidden />}
             {health?.demo_mode ? 'Demo · Cached' : offline ? 'Cached' : 'Live'}
           </span>
           <span
-            className={`flex items-center gap-1 rounded-full px-2.5 py-1 ${health?.gemma_configured ? 'bg-teal-400/15 text-teal-100' : 'bg-slate-500/20 text-slate-300'}`}
+            className={`flex items-center gap-1 rounded-full px-2.5 py-1 ${health?.gemma_configured ? 'bg-teal-400/15 text-teal-100' : 'bg-slate-500/20 text-slate-200'}`}
             title={health?.gemma_configured ? `Gemma model: ${health.gemma_model}` : 'Add GEMINI_API_KEY to backend/.env'}
           >
-            <Sparkles size={12} /> Gemma {health?.gemma_configured ? 'on' : 'off'}
+            <Sparkles size={12} aria-hidden /> Gemma {health?.gemma_configured ? 'on' : 'off'}
           </span>
         </div>
       </header>
 
       {bootError && (
-        <div className="px-4">
+        <div className="px-3 pb-2 sm:px-4">
           <ErrorBox message={bootError} />
         </div>
       )}
 
-      <main className="grid min-h-0 flex-1 gap-3 px-4 pb-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(380px,1fr)]">
-        <div className="relative min-h-[380px]">
+      {/* Phone: the map fills the screen and the panel is a bottom sheet. Desktop (lg): two columns. */}
+      <main className="relative min-h-0 flex-1 lg:grid lg:grid-cols-[minmax(0,1.25fr)_minmax(380px,1fr)] lg:gap-3 lg:px-4 lg:pb-4">
+        <div className="absolute inset-0 lg:relative lg:inset-auto lg:min-h-[380px]">
           <MapView
             target={target}
             spots={mapSpots}
             selectedId={mode === 'spot' && spot ? 'selected' : null}
             gibsDate={report?.imagery.date ?? yesterdayUtc()}
-            chlTime={report?.chlorophyll.overlay_time ?? null}
-            lens={lens}
             scanning={scanning}
             offline={offline}
             circle={nearby ? { lat: nearby.origin.lat, lon: nearby.origin.lon, km: nearby.radius_km } : null}
@@ -305,65 +309,56 @@ export default function App() {
             onWaterClick={selectWater}
             onWaterHover={setHoverId}
           />
-          <div className="glass-strong absolute bottom-4 left-4 z-[600] w-64 rounded-xl p-3 text-xs">
-            <label className="flex items-center justify-between gap-2 font-semibold text-teal-100">
-              <span className="flex items-center gap-1">
-                <Layers size={13} /> Color lens
-              </span>
-              <span className="text-slate-400">{Math.round(lens * 100)}% chlorophyll</span>
-            </label>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              value={lens}
-              onChange={(e) => setLens(Number(e.target.value))}
-              className="lens mt-2 w-full"
-              aria-label="Blend imagery and chlorophyll overlay"
-              disabled={!report?.chlorophyll.overlay_time}
-            />
-            <div className="mt-1 flex justify-between text-[10px] text-slate-400">
-              <span>Imagery</span>
-              <span>Chlorophyll</span>
-            </div>
-            {!report && <p className="mt-1 text-[10px] text-slate-500">Open a beach or bay report to enable the chlorophyll layer.</p>}
-          </div>
           {FEATURES.presentationKeys && (
-            <div className="glass-strong absolute top-4 right-4 z-[600] rounded-xl px-3 py-2 text-[11px] text-slate-300">
+            <div className="glass-strong absolute top-14 right-3 z-[600] rounded-xl px-3 py-2 text-xs text-slate-300">
               <kbd className="rounded bg-white/10 px-1">P</kbd> demo beaches · <kbd className="rounded bg-white/10 px-1">O</kbd> offline
             </div>
           )}
         </div>
 
-        <aside className="min-h-0 overflow-y-auto pr-1">
-          <AnimatePresence mode="wait">
-            {mode === 'near' ? (
-              <motion.div key="near" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}>
-                <NearbyPanel
-                  result={nearby}
-                  radiusMi={lastSearch?.radiusMi ?? null}
-                  loading={nearbyLoading}
-                  error={nearbyError}
-                  onRetry={() => lastSearch && runNearby(lastSearch.address, lastSearch.radiusMi)}
-                  highlightId={highlightId}
-                  onHover={setHoverId}
-                  onSelect={selectWater}
-                />
-              </motion.div>
-            ) : (
-              <motion.div key="spot" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} className="space-y-3">
-                <button type="button" onClick={backToResults} className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-teal-100 hover:bg-white/10">
-                  <ArrowLeft size={15} /> {nearby ? `Back to ${nearby.spots.length} results` : 'Search nearby'}
-                </button>
-                {reportLoading && <Loading label="Reading satellite passes and official status…" />}
-                {reportError && <ErrorBox message={reportError} onRetry={spot ? () => openSpot(spot) : undefined} />}
-                {report && !reportLoading && (
-                  <ReportPanel report={report} insights={insights} insightsLoading={insightsLoading} insightsError={insightsError} voice={voice} />
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+        <aside
+          className={`absolute inset-x-0 bottom-0 z-[700] flex flex-col rounded-t-2xl border-t border-white/10 bg-navy-900 transition-[height] duration-200 lg:static lg:z-auto lg:h-auto lg:min-h-0 lg:rounded-none lg:border-0 lg:bg-transparent ${sheetOpen ? 'h-[72%]' : 'h-[40%]'}`}
+          aria-label="Results"
+        >
+          <button
+            type="button"
+            onClick={() => setSheetOpen((o) => !o)}
+            aria-expanded={sheetOpen}
+            aria-controls="panel"
+            aria-label={sheetOpen ? 'Make the panel smaller' : 'Make the panel larger'}
+            className="flex h-7 w-full shrink-0 items-center justify-center lg:hidden"
+          >
+            <span className="h-1 w-10 rounded-full bg-slate-400" />
+          </button>
+          <div id="panel" className="min-h-0 flex-1 overflow-y-auto px-3 pb-4 lg:px-0 lg:pr-1 lg:pb-0">
+            <AnimatePresence mode="wait">
+              {mode === 'near' ? (
+                <motion.div key="near" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}>
+                  <NearbyPanel
+                    result={nearby}
+                    radiusMi={lastSearch?.radiusMi ?? null}
+                    loading={nearbyLoading}
+                    error={nearbyError}
+                    onRetry={() => lastSearch && runNearby(lastSearch.address, lastSearch.radiusMi)}
+                    highlightId={highlightId}
+                    onHover={setHoverId}
+                    onSelect={selectWater}
+                  />
+                </motion.div>
+              ) : (
+                <motion.div key="spot" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} className="space-y-3">
+                  <button type="button" onClick={backToResults} className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-teal-100 hover:bg-white/10">
+                    <ArrowLeft size={15} aria-hidden /> {nearby ? `Back to ${nearby.spots.filter((b) => b.report_available).length} results` : 'Search nearby'}
+                  </button>
+                  {reportLoading && <Loading label="Reading satellite passes and official status…" />}
+                  {reportError && <ErrorBox message={reportError} onRetry={spot ? () => openSpot(spot) : undefined} />}
+                  {report && !reportLoading && (
+                    <ReportPanel report={report} insights={insights} insightsLoading={insightsLoading} insightsError={insightsError} voice={voice} />
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </aside>
       </main>
     </div>

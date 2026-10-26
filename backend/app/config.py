@@ -98,7 +98,7 @@ FILL_TILE_TEMPLATE = (
 FILL_MAX_ZOOM = 8
 
 # --- Measurement box and thresholds ---
-OFFSHORE_BOX_KM = 2.0  # half-size of the box around the beach; cells that overlap it are averaged
+OFFSHORE_BOX_KM = 5.0  # half-size of the box around the beach; cells that overlap it are averaged (wide enough to reach ocean pixels past the coast mask)
 TREND_DAYS = 7
 CHL_LOOKBACK_DAYS = 14
 CHL_ELEVATED = 3.0  # mg m^-3

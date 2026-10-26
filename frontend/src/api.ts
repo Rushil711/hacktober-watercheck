@@ -67,6 +67,8 @@ export const api = {
     getJson<BeachReport>(`/api/beach/report?${q(spot)}`, signal),
   nearby: (address: string, radiusMi: number, signal?: AbortSignal) =>
     getJson<NearbyResult>(`/api/nearby?${q({ address, radius_mi: radiusMi })}`, signal),
+  nearbyAt: (lat: number, lon: number, radiusMi: number, signal?: AbortSignal) =>
+    getJson<NearbyResult>(`/api/nearby?${q({ lat, lon, radius_mi: radiusMi })}`, signal),
   insights: (report: BeachReport, signal?: AbortSignal) => postJson<Insights>('/api/beach/insights', report, signal),
   naturalSearch: (query: string, origin: { lat: number; lon: number } | null, signal?: AbortSignal) =>
     postJson<NaturalSearchResult>('/api/gemma/search', { query, origin }, signal),
@@ -85,6 +87,6 @@ export const api = {
 // Bump when the server changes what a tile looks like, so browsers drop their cached copies.
 const TILE_VERSION = 2
 
-export function tileUrl(provider: 'base' | 'ortho' | 'gibs', extra = ''): string {
+export function tileUrl(provider: 'base' | 'ortho' | 'gibs' | 'chl', extra = ''): string {
   return withOffline(`/api/tiles/${provider}/{z}/{x}/{y}${extra}${extra ? '&' : '?'}v=${TILE_VERSION}`)
 }

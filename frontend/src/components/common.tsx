@@ -8,7 +8,7 @@ import type { Halo, Receipt } from '../types'
 export function CachedBadge({ cached }: { cached: boolean }) {
   if (!cached) return null
   return (
-    <span className="rounded-full bg-amber-400/20 px-1.5 py-0.5 text-xs font-semibold tracking-wide text-amber-200 uppercase">
+    <span className="rounded-full bg-amber-400/20 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-amber-200 uppercase">
       Cached
     </span>
   )
@@ -53,7 +53,7 @@ export function ReceiptButton({ receipt, children, className = '' }: { receipt: 
             aria-label="Evidence receipt"
           >
             <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-semibold tracking-widest text-teal-200 uppercase">Evidence receipt</span>
+              <span className="text-[10px] font-semibold tracking-widest text-teal-200 uppercase">Evidence receipt</span>
               <button type="button" onClick={() => setOpen(false)} className="text-slate-400 hover:text-white" aria-label="Close">
                 <X size={14} />
               </button>
@@ -86,7 +86,7 @@ export function ReceiptButton({ receipt, children, className = '' }: { receipt: 
                 Open source <ExternalLink size={12} />
               </a>
             ) : (
-              <p className="mt-2 text-slate-400">No link available.</p>
+              <p className="mt-2 text-slate-500">No link available.</p>
             )}
           </motion.div>
         )}
@@ -107,7 +107,7 @@ export function HaloBadge({ halo }: { halo: Halo }) {
   return (
     <span
       className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
-      style={{ background: `${color}26`, color }}
+      style={{ background: `${color}26`, color, boxShadow: `0 0 16px ${color}55` }}
       title={halo.reasons.join(' · ')}
     >
       <HaloIcon icon={halo.icon} size={14} />
@@ -149,9 +149,9 @@ export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () =
 
 export function Card({ title, icon, children, right }: { title: string; icon?: ReactNode; children: ReactNode; right?: ReactNode }) {
   return (
-    <section className="glass rounded-2xl p-4">
+    <section className="glass card-lift rounded-2xl p-4">
       <header className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="flex items-center gap-2 text-xs font-semibold tracking-widest text-teal-200/90 uppercase">
+        <h3 className="flex items-center gap-2 font-[family-name:var(--font-display)] text-[17px] font-semibold text-white [&>svg]:text-teal-300">
           {icon}
           {title}
         </h3>

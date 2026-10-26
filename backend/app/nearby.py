@@ -1,4 +1,4 @@
-"""Feature 1 search candidates and Feature 2 "water near me"."""
+"""Feature 1 search candidates and Feature 2 "search nearby" (water bodies inside a radius)."""
 
 from __future__ import annotations
 
@@ -6,10 +6,12 @@ import asyncio
 
 from . import config as C
 from .cache import OfflineMiss
-from .models import Candidate, NearbyResult, NearbySpot, SearchResult, Spot
+from .models import Candidate, NearbyResult, SearchResult, Spot, WaterBody
 from .net import haversine_km
-from .providers import advisories, erddap, places
+from .providers import advisories, erddap, places, water
 from .scoring import c_to_f, chl_level, compute_halo
+
+COASTAL_KINDS = ("beach", "bay")  # the kinds the ocean report and halos cover
 
 
 async def search(query: str) -> SearchResult:
@@ -63,68 +65,46 @@ def _sample(grid: erddap.Grid | None, lat: float, lon: float) -> tuple[float | N
     return latest.mean, erddap.age_days(latest.time)
 
 
-async def nearby(lat: float, lon: float, drive_min: int) -> NearbyResult:
-    warnings: list[str] = []
-    radius_km = drive_min * C.MAX_KM_PER_MIN
-    origin = Spot(name="Search center", lat=lat, lon=lon, kind="origin")
-    try:
-        spots = await places.water_spots(lat, lon, radius_km)
-    except Exception as exc:  # noqa: BLE001
-        reason = "not in the offline cache" if isinstance(exc, OfflineMiss) else type(exc).__name__
-        return NearbyResult(
-            origin=origin, drive_min=drive_min, ring_km=radius_km, spots=[], warnings=[f"Beach discovery unavailable ({reason})."]
+async def nearby(origin: Spot, radius_km: float) -> NearbyResult:
+    bodies, warnings = await water.water_bodies(origin.lat, origin.lon, radius_km)
+    bodies = bodies[: C.MAX_NEARBY_SPOTS]
+    coastal = [b for b in bodies if b["kind"] in COASTAL_KINDS]
+    chl_grid = sst_grid = None
+    snapshot: dict = {}
+    if coastal:
+        lats = [b["lat"] for b in coastal]
+        lons = [b["lon"] for b in coastal]
+        pad = 0.08
+
+        async def grid(ds: C.GridDataset, days: int):
+            return await erddap.fetch_grid(ds, min(lats) - pad, max(lats) + pad, min(lons) - pad, max(lons) + pad, days)
+
+        chl_grid, sst_grid, snapshot = await asyncio.gather(
+            grid(C.CHL_DATASET, C.TREND_DAYS), grid(C.SST_DATASET, 2), advisories.status_lookup_bulk(), return_exceptions=True
         )
-    spots = spots[: C.MAX_NEARBY_SPOTS * 2]
-    durations, method = await places.drive_minutes((lat, lon), [(s["lat"], s["lon"]) for s in spots])
-    if method == "straight-line":
-        warnings.append("OSRM drive times unavailable; using a straight-line estimate.")
-    in_range = [(s, d) for s, d in zip(spots, durations, strict=True) if d is not None and d <= drive_min]
-    in_range = in_range[: C.MAX_NEARBY_SPOTS]
-    if not in_range:
-        return NearbyResult(origin=origin, drive_min=drive_min, ring_km=radius_km, spots=[], warnings=warnings)
+        if isinstance(chl_grid, Exception):
+            warnings.append("Chlorophyll unavailable for the map.")
+            chl_grid = None
+        if isinstance(sst_grid, Exception):
+            warnings.append("Sea temperature unavailable for the map.")
+            sst_grid = None
+        if isinstance(snapshot, Exception) or not snapshot:
+            warnings.append("County beach status unavailable; halos treat official status as unverified.")
+            snapshot = {}
 
-    lats = [s["lat"] for s, _ in in_range]
-    lons = [s["lon"] for s, _ in in_range]
-    pad = 0.08
-
-    async def grid(ds: C.GridDataset, days: int):
-        return await erddap.fetch_grid(ds, min(lats) - pad, max(lats) + pad, min(lons) - pad, max(lons) + pad, days)
-
-    chl_grid, sst_grid, snapshot = await asyncio.gather(
-        grid(C.CHL_DATASET, C.TREND_DAYS), grid(C.SST_DATASET, 2), advisories.status_lookup_bulk(), return_exceptions=True
-    )
-    if isinstance(chl_grid, Exception):
-        warnings.append("Chlorophyll unavailable for the map.")
-        chl_grid = None
-    if isinstance(sst_grid, Exception):
-        warnings.append("Sea temperature unavailable for the map.")
-        sst_grid = None
-    if isinstance(snapshot, Exception) or not snapshot:
-        warnings.append("County beach status unavailable; halos treat official status as unverified.")
-        snapshot = {}
-
-    out: list[NearbySpot] = []
-    for s, d in in_range:
-        chl, chl_age = _sample(chl_grid, s["lat"], s["lon"])
-        sst_c, _ = _sample(sst_grid, s["lat"], s["lon"])
-        if s["kind"] == "cliff" and sst_grid is not None and sst_c is None:
-            continue  # inland cliff: no ocean cell nearby
-        status = advisories.quick_status(snapshot, s["lat"], s["lon"]) if snapshot else "unverified"
-        level = chl_level(chl)
-        halo = compute_halo(status, level, chl_age is not None and chl_age > C.CHL_STALE_DAYS, sst_c is not None)
-        out.append(
-            NearbySpot(
-                name=s["name"],
-                lat=s["lat"],
-                lon=s["lon"],
-                kind=s["kind"],
-                drive_min=d,
-                drive_method=method,
-                halo=halo,
-                official_status=status,
-                sea_temp_f=None if sst_c is None else round(c_to_f(sst_c), 1),
-                chl=None if chl is None else round(chl, 2),
-            )
-        )
-    out.sort(key=lambda x: x.drive_min)
-    return NearbyResult(origin=origin, drive_min=drive_min, ring_km=radius_km, spots=out, warnings=warnings)
+    out: list[WaterBody] = []
+    for b in bodies:
+        body = WaterBody(**b)
+        if b["kind"] in COASTAL_KINDS:
+            # Ocean grids only: a lake or river near the coast would pick up ocean cells.
+            chl, chl_age = _sample(chl_grid, b["lat"], b["lon"])
+            sst_c, _ = _sample(sst_grid, b["lat"], b["lon"])
+            status = advisories.quick_status(snapshot, b["lat"], b["lon"]) if snapshot else "unverified"
+            body.report_available = True
+            body.official_status = status
+            stale = chl_age is not None and chl_age > C.CHL_STALE_DAYS
+            body.halo = compute_halo(status, chl_level(chl), stale, sst_c is not None)
+            body.sea_temp_f = None if sst_c is None else round(c_to_f(sst_c), 1)
+            body.chl = None if chl is None else round(chl, 2)
+        out.append(body)
+    return NearbyResult(origin=origin, radius_km=round(radius_km, 3), spots=out, warnings=warnings)

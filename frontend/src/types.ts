@@ -1,3 +1,5 @@
+import type { Geometry } from 'geojson'
+
 export type OfficialStatusCode =
   | 'closure'
   | 'warning'
@@ -167,31 +169,35 @@ export interface SearchResult {
   warnings: string[]
 }
 
-export interface NearbySpot {
+export interface WaterBody {
+  id: string
   name: string
+  kind: string // beach, bay, river, lake, reservoir, estuary, or lagoon
   lat: number
   lon: number
-  kind: string
-  drive_min: number
-  drive_method: 'osrm' | 'straight-line'
-  halo: Halo
-  official_status: OfficialStatusCode
+  distance_km: number // to the nearest point of the outline
+  source: string
+  geometry: Geometry
+  report_available: boolean // the ocean report covers beaches and bays only
+  halo: Halo | null
+  official_status: OfficialStatusCode | null
   sea_temp_f: number | null
   chl: number | null
 }
 
 export interface NearbyResult {
   origin: Spot
-  drive_min: number
-  ring_km: number
-  spots: NearbySpot[]
+  radius_km: number
+  spots: WaterBody[]
   attribution: string
   warnings: string[]
 }
 
 export interface AppConfig {
   demo_beaches: { key: string; name: string; lat: number; lon: number; kind: string }[]
-  drive_options: number[]
+  nearby_default_mi: number
+  nearby_min_mi: number
+  nearby_max_mi: number
   chl_dataset: string
   chl_variable: string
   chl_wms_url: string
@@ -199,7 +205,6 @@ export interface AppConfig {
   gibs_layer: string
   gibs_max_zoom: number
   safety_line: string
-  max_km_per_min: number
 }
 
 export interface Health {

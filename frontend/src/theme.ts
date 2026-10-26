@@ -13,6 +13,14 @@ export const theme = {
   tide: '#38bdf8',
   air: '#fbbf24',
   chl: '#4ade80',
+  water: '#38bdf8',
+  waterLine: '#7dd3fc',
+  sand: '#f5deb3', // pale, so beaches do not look like an amber halo
+}
+
+// Map and list color for a water body kind from /api/nearby.
+export function kindColor(kind: string): string {
+  return kind === 'beach' ? theme.sand : theme.water
 }
 
 export const officialStyle: Record<OfficialStatusCode, { tone: string; ring: string; note?: string }> = {

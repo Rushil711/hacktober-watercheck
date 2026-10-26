@@ -1,10 +1,12 @@
 import L from 'leaflet'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { Circle, CircleMarker, MapContainer, Marker, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet'
+import { Circle, CircleMarker, GeoJSON, MapContainer, Marker, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet'
 import { tileUrl } from '../api'
-import { theme } from '../theme'
-import type { Halo } from '../types'
+import { kmToMi } from '../format'
+import { kindColor, theme } from '../theme'
+import type { Geometry } from 'geojson'
+import type { Halo, WaterBody } from '../types'
 import { HaloIcon } from './common'
 
 export interface MapSpot {
@@ -16,9 +18,17 @@ export interface MapSpot {
   subtitle?: string
 }
 
+export interface SearchCircle {
+  lat: number
+  lon: number
+  km: number
+}
+
+// Where the map flies: a point and zoom, the search circle, or one water body's outline.
+export type MapTarget = { center: [number, number]; zoom: number } | { circle: SearchCircle } | { geometry: Geometry }
+
 interface Props {
-  center: [number, number]
-  zoom: number
+  target: MapTarget
   spots: MapSpot[]
   selectedId: string | null
   gibsDate: string | null
@@ -26,9 +36,13 @@ interface Props {
   lens: number
   scanning: boolean
   offline: boolean
-  ring: { lat: number; lon: number; km: number } | null
-  origin: { lat: number; lon: number } | null
-  onSpotClick: (spot: MapSpot) => void
+  circle: SearchCircle | null
+  origin: { lat: number; lon: number; name: string } | null
+  water: WaterBody[]
+  highlightId: string | null
+  onSpotClick?: (spot: MapSpot) => void
+  onWaterClick: (body: WaterBody) => void
+  onWaterHover: (id: string | null) => void
   onMapClick?: (lat: number, lon: number) => void
 }
 
@@ -53,11 +67,18 @@ function haloIcon(halo: Halo | null, selected: boolean): L.DivIcon {
   })
 }
 
-function FlyTo({ center, zoom }: { center: [number, number]; zoom: number }) {
+function FlyTo({ target }: { target: MapTarget }) {
   const map = useMap()
   useEffect(() => {
-    map.flyTo(center, zoom, { duration: 1.1 })
-  }, [map, center, zoom])
+    if ('circle' in target) {
+      const { lat, lon, km } = target.circle
+      map.flyToBounds(L.latLng(lat, lon).toBounds(km * 2000), { padding: [24, 24], duration: 1.1 })
+    } else if ('geometry' in target) {
+      map.flyToBounds(L.geoJSON(target.geometry).getBounds(), { padding: [48, 48], maxZoom: 15, duration: 1.1 })
+    } else {
+      map.flyTo(target.center, target.zoom, { duration: 1.1 })
+    }
+  }, [map, target])
   return null
 }
 
@@ -116,24 +137,63 @@ function useAnimatedNumber(target: number, ms = 600): number {
   return value
 }
 
-function DriveRing({ lat, lon, km }: { lat: number; lon: number; km: number }) {
+function RadiusRing({ lat, lon, km }: SearchCircle) {
   const radius = useAnimatedNumber(km * 1000)
   return (
     <Circle
       center={[lat, lon]}
       radius={radius}
-      pathOptions={{ color: theme.teal, weight: 1.5, opacity: 0.7, fillColor: theme.teal, fillOpacity: 0.06, dashArray: '6 8' }}
+      interactive={false}
+      pathOptions={{ color: theme.teal, weight: 2, opacity: 0.85, fillColor: theme.teal, fillOpacity: 0.05, dashArray: '6 8' }}
     />
   )
 }
 
+function shapeStyle(kind: string, highlighted: boolean): L.PathOptions {
+  const color = kindColor(kind)
+  if (kind === 'river') {
+    return { color: highlighted ? '#ffffff' : color, weight: highlighted ? 6 : 4, opacity: 0.95 }
+  }
+  return {
+    color: highlighted ? '#ffffff' : kind === 'beach' ? color : theme.waterLine,
+    weight: highlighted ? 3 : 1.5,
+    opacity: 1,
+    fillColor: color,
+    fillOpacity: highlighted ? 0.7 : 0.45,
+  }
+}
+
+function WaterShape({ body, highlighted, onClick, onHover }: { body: WaterBody; highlighted: boolean; onClick: () => void; onHover: (on: boolean) => void }) {
+  const style = useMemo(() => shapeStyle(body.kind, highlighted), [body.kind, highlighted])
+  return (
+    <GeoJSON
+      data={body.geometry}
+      style={style}
+      pointToLayer={(_, latlng) => L.circleMarker(latlng, { radius: 7 })}
+      eventHandlers={{ click: onClick, mouseover: () => onHover(true), mouseout: () => onHover(false) }}
+    >
+      <Tooltip sticky>
+        <div className="text-xs">
+          <strong>{body.name}</strong>
+          <div>
+            {body.kind} · {kmToMi(body.distance_km)} mi away
+          </div>
+          {body.halo && <div>{body.halo.label}</div>}
+        </div>
+      </Tooltip>
+    </GeoJSON>
+  )
+}
+
 export default function MapView(props: Props) {
-  const { center, zoom, spots, selectedId, gibsDate, chlTime, lens, scanning, offline, ring, origin, onSpotClick, onMapClick } = props
-  const [viewZoom, setViewZoom] = useState(zoom)
+  const { target, spots, selectedId, gibsDate, chlTime, lens, scanning, offline, circle, origin, water, highlightId } = props
+  const { onSpotClick, onWaterClick, onWaterHover, onMapClick } = props
   const baseUrl = tileUrl('base')
   const orthoUrl = tileUrl('ortho')
   const gibsUrl = gibsDate ? tileUrl('gibs', `?date=${gibsDate}`) : null
   const chlUrl = chlTime ? tileUrl('chl', `?date=${encodeURIComponent(chlTime)}`) : null
+  const [start] = useState(() => ('center' in target ? target : { center: [32.8, -117.25] as [number, number], zoom: 11 }))
+  const [viewZoom, setViewZoom] = useState(start.zoom)
   const imageryOpacity = 1 - lens * 0.55
   const icons = useMemo(
     () => new Map(spots.map((s) => [s.id, haloIcon(s.halo, s.id === selectedId)])),
@@ -142,7 +202,7 @@ export default function MapView(props: Props) {
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-2xl">
-      <MapContainer center={center} zoom={zoom} minZoom={3} maxZoom={MAP_MAX_ZOOM} className="h-full w-full" zoomControl={false} worldCopyJump>
+      <MapContainer center={start.center} zoom={start.zoom} minZoom={3} maxZoom={MAP_MAX_ZOOM} className="h-full w-full" zoomControl={false} worldCopyJump>
         <TileLayer
           key={`base-${offline}`}
           url={baseUrl}
@@ -177,12 +237,21 @@ export default function MapView(props: Props) {
             attribution='Chlorophyll: <a href="https://coastwatch.noaa.gov/erddap/">NOAA CoastWatch ERDDAP</a>'
           />
         )}
-        <FlyTo center={center} zoom={zoom} />
+        <FlyTo target={target} />
         <ClickCatcher onMapClick={onMapClick} onZoom={setViewZoom} />
-        {ring && <DriveRing lat={ring.lat} lon={ring.lon} km={ring.km} />}
+        {circle && <RadiusRing lat={circle.lat} lon={circle.lon} km={circle.km} />}
+        {water.map((b) => (
+          <WaterShape
+            key={b.id}
+            body={b}
+            highlighted={b.id === highlightId}
+            onClick={() => onWaterClick(b)}
+            onHover={(on) => onWaterHover(on ? b.id : null)}
+          />
+        ))}
         {origin && (
           <CircleMarker center={[origin.lat, origin.lon]} radius={7} pathOptions={{ color: '#fff', fillColor: theme.teal, fillOpacity: 1, weight: 2 }}>
-            <Tooltip direction="top">Search center</Tooltip>
+            <Tooltip direction="top">Starting address: {origin.name}</Tooltip>
           </CircleMarker>
         )}
         {spots.map((s) => (
@@ -190,7 +259,7 @@ export default function MapView(props: Props) {
             key={s.id}
             position={[s.lat, s.lon]}
             icon={icons.get(s.id)!}
-            eventHandlers={{ click: () => onSpotClick(s) }}
+            eventHandlers={{ click: () => onSpotClick?.(s) }}
             keyboard
             title={s.name}
           >

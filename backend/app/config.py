@@ -128,13 +128,17 @@ DEFAULT_TIMEZONE = "America/Los_Angeles"
 BEST_WINDOW_HOURS = 2
 IDEAL_AIR_F = 75.0
 
-# --- Discovery and drive time ---
-DRIVE_OPTIONS_MIN = (15, 30, 60)
+# --- Discovery ---
 SEARCH_RADIUS_KM = 3.0  # around a geocoded address
-STRAIGHT_LINE_KM_PER_MIN = 0.8  # fallback speed when OSRM is unavailable
-MAX_KM_PER_MIN = 1.5  # search radius upper bound per minute of driving
-MAX_NEARBY_SPOTS = 120
-OSRM_BATCH = 90
+STRAIGHT_LINE_KM_PER_MIN = 0.8  # turns a Gemma drive-time filter into a search radius
+MI_TO_KM = 1.609344
+NEARBY_DEFAULT_MI = 5.0
+NEARBY_MIN_MI = 0.5
+NEARBY_MAX_MI = 25.0  # Nominatim returns at most 40 results per category, so keep the area small
+MAX_NEARBY_SPOTS = 150
+NOMINATIM_MIN_INTERVAL_S = 1.1  # Nominatim usage policy: at most 1 request per second
+NOMINATIM_LIMIT = 40
+SHAPE_TOLERANCE_DEG = 0.0003  # about 30 m; simplifies water outlines sent to the map
 
 # --- Cache TTLs (seconds) ---
 TTL_GRID = 30 * 60
@@ -145,7 +149,6 @@ TTL_TIDES = 6 * 3600
 TTL_WEATHER = 30 * 60
 TTL_PLACES = 7 * 24 * 3600
 TTL_GEOCODE = 30 * 24 * 3600
-TTL_DRIVE = 7 * 24 * 3600
 TTL_GIBS = 60 * 60
 TTL_GEMMA = 6 * 3600
 TTL_TILES = 24 * 3600

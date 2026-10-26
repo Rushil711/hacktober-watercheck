@@ -65,8 +65,8 @@ export const api = {
   search: (query: string, signal?: AbortSignal) => getJson<SearchResult>(`/api/search?${q({ q: query })}`, signal),
   report: (spot: { lat: number; lon: number; name: string; kind: string }, signal?: AbortSignal) =>
     getJson<BeachReport>(`/api/beach/report?${q(spot)}`, signal),
-  nearby: (lat: number, lon: number, driveMin: number, signal?: AbortSignal) =>
-    getJson<NearbyResult>(`/api/nearby?${q({ lat, lon, drive_min: driveMin })}`, signal),
+  nearby: (address: string, radiusMi: number, signal?: AbortSignal) =>
+    getJson<NearbyResult>(`/api/nearby?${q({ address, radius_mi: radiusMi })}`, signal),
   insights: (report: BeachReport, signal?: AbortSignal) => postJson<Insights>('/api/beach/insights', report, signal),
   naturalSearch: (query: string, origin: { lat: number; lon: number } | null, signal?: AbortSignal) =>
     postJson<NaturalSearchResult>('/api/gemma/search', { query, origin }, signal),

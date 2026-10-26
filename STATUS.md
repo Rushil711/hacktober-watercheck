@@ -1,4 +1,4 @@
-# WaterCheck status (rough draft, 2026-10-25 4:15 PM PT)
+# WaterCheck status (rough draft, updated 2026-10-25 5:10 PM PT)
 
 ## Done and verified
 
@@ -17,23 +17,29 @@
   - Every layer's `maxZoom` equals its native zoom, and the map stops at zoom 16.
   - The chlorophyll WMS is remapped row by row from EPSG:4326 to Web Mercator. Checked by drawing ERDDAP's own coastline through the same code path over the imagery.
   - Checked in headless Chrome at La Jolla Shores and Sunset Cliffs at zoom 16 (coastline legible) and at zoom 9 (daily layer).
-- **Search and beach picker.** `GET /api/search?q=La Jolla Shores` returns the Nominatim place plus nearby OpenStreetMap beaches. Tested through the Vite proxy; the click-through was not automated.
+- **Search and beach picker.** `GET /api/search?q=La Jolla Shores` returns the Nominatim place plus nearby OpenStreetMap beaches. Tested through the Vite proxy. The UI no longer calls it: the Search nearby top bar replaced the single-spot search box.
+- **Search nearby (Feature 2, first slice), checked in Chrome.** The top bar has "Enter a starting address", "Radius in miles" (0.5 to 25), and a **Search nearby** button. `GET /api/nearby?address=…&radius_mi=…` geocodes the address and returns the named water bodies inside the circle, nearest first, with GeoJSON outlines. Beaches, bays, and rivers come from a Nominatim category search plus `/lookup` for outlines. Lakes, reservoirs, and estuaries come from the USGS NHD waterbody layer (US only). Beaches and bays also get the halo, sea temperature, and county status. The map draws the dashed circle and highlights each water body (beaches in sand color, water in blue). A hover on a list row highlights its shape. A beach or bay opens the Feature 1 report, with "Back to N results". A lake or river zooms the map to its outline. Live results: La Jolla Shores, 5 mi: 25 water bodies in 7.5 s (16 beaches, 7 bays, 1 river, 1 estuary). Santee, 6 mi: 7 lakes, 1 reservoir, and the San Diego River.
 - **Gemma card (hosted Gemma 4 `gemma-4-26b-a4b-it` via the Gemini API, the same integration as the old `server.py`).** Explanation, swim/jump verdicts, and best-hours reasons were generated live and validated with Pydantic. Checks: one retry on bad output, numbers must appear in the evidence, levels and labels must match the code's, and "safe" claims are rejected. On failure the card is hidden and the data stays.
 - **Grok Voice briefing (SpaceXSI track):** `POST /api/voice/briefing` was called live against xAI `POST /v1/tts`. It returned a 31-second MP3 (MPEG layer III, 24 kHz, 128 kbps) in 3.7 s. The spoken script is built by code from the report, with Gemma's headline included only when that card passed validation. The "Play Grok Voice briefing" button shows in the report, with a native audio player as fallback. Clicking it was not automated. The briefing turns on or off as soon as `XAI_API_KEY` in `backend/.env` changes, with no restart.
-- **Tests:** `pytest` passes 11 tests: ERDDAP metadata and grid parsing, stale data, missing data shown as "Unavailable", "no advisory found" vs. unverified, old BeachWatch records shown as unverified, bad Gemma JSON with retry then fallback, invented-number rejection, safe-claim rule, and unicode grounding.
+- **Tests:** `pytest` passes 17 tests: the water-body merge (5 tests in `tests/test_water.py`), the chlorophyll tile remap, ERDDAP metadata and grid parsing, stale data, missing data shown as "Unavailable", "no advisory found" vs. unverified, old BeachWatch records shown as unverified, bad Gemma JSON with retry then fallback, invented-number rejection, safe-claim rule, and unicode grounding.
 - **Key handling:** `backend/.env` is gitignored and was only appended to (missing variable names). No key values were written or printed. `XAI_API_KEY` loads and passes the format check (starts with `xai-`, no brackets or quotes).
 
 ## Not completed
 
-- **Feature 2, Find water near me:** backend `/api/nearby` (Overpass + OSRM + regional grids) and `NearbyPanel` are written but not verified. The UI shows "Near me (coming soon)" as disabled (`frontend/src/features.ts` → `nearMe`).
-- **Gemma natural search** ("warm water within 30 min of UCSD"): `/api/gemma/search` is written but not verified. It is part of Feature 2, so it's hidden.
+- **Search nearby, open items:**
+  - Overpass was at capacity on 2026-10-25 (HTTP 502 and timeouts on 3 public servers). For this reason, Search nearby uses Nominatim and USGS NHD. OSRM drive times were removed.
+  - A cold USGS NHD query takes 9 to 40 s (the timeout is 45 s). A warm or cached query takes less than 1 s. On a timeout, the panel shows "Lakes and reservoirs unavailable".
+  - Nominatim returns at most 40 results for each category. A large radius in a dense area can miss beaches. The panel shows a warning when a category hits the limit.
+  - Cliffs are not in the results, because they are not water bodies. The ocean report covers beaches and bays only. Lakes and rivers have no water-quality data yet.
+  - At high zoom the satellite photo is blurry (GIBS max zoom 9), and it hides the street map under the outlines.
+  - The "Use my location" button and the Ask Gemma box were removed from the panel.
+- **Gemma natural search** ("warm water within 30 min of UCSD"): `/api/gemma/search` is written but not verified, and the UI does not call it. It now turns the drive time into a straight-line radius (0.8 km per minute). Its `jump` filter finds nothing, because the results do not include cliffs.
 - **Presentation mode (keys P and O) and the Live/Cached toggle:** code is written but turned off (`presentationKeys`). The badge always reads "Live".
 - **Offline / DEMO_MODE cache fill for the 3 demo beaches:** the cache layer works (it was used on every request), but the demo beaches were not pre-filled and offline mode was not tested. The `backend/cache/` folder is gitignored.
-- **Drive ring and halo map for Feature 2:** built inside `MapView` but only visible in Near-me mode, which is hidden.
 - **Eval set** (`backend/tests/evals/`, 10 fixtures, `pytest -m eval`): the marker is configured in `pyproject.toml`, but there are no fixtures yet.
 - **Chlorophyll color lens:** the slider and the WMS proxy (EPSG:4326 per tile) are built. The chlorophyll overlay was not visually verified; near La Jolla it is mostly cloud gaps.
 - **Detail imagery limits:** USGS orthoimagery covers the US only; elsewhere the dark map shows at zoom 10+. It ends a few km offshore, where the service returns black. It is aerial imagery last refreshed June 2024, not same-day; the on-map legend says so. Same-day imagery is only the zoom ≤ 9 NOAA-20 layer.
-- **Overpass is slow:** the first search for a new place took about 82 s on the public server. It is now capped at 30 s and falls back to "check this exact point". Cached searches are instant.
+- **Overpass is slow (`/api/search` only):** the first search for a new place took about 82 s on the public server. It is now capped at 30 s and falls back to "check this exact point". Cached searches are instant.
 - **Known Gemma imprecision:** one explanation called the chlorophyll cell "5 km" (it is 4 km). This passes the number check because 5 km appears in the SST caveat.
 - **Human checks from the README:** confirm the 3 station matches (La Jolla Shores → EH-320 "Vallecitos" 0.09 km, Black's Beach → FM-090 0.18 km, Sunset Cliffs → PL-070 "Ladera Street" 0.72 km), approve the thresholds in `backend/app/config.py`, and read Gemma output for 3 beaches.
 - **Dataset change to confirm:** the README's `noaacwNPPN20VIIRSchlociDaily` ended 2021-09-02 (variable `chl_oci`). The app uses `noaacwN20VIIRSchlaDaily` (`chlor_a`, current). Confirm on the ERDDAP page.

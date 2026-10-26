@@ -1,21 +1,35 @@
-"""Nominatim geocoding, Overpass beach/cliff discovery, and OSRM drive times."""
+"""Nominatim geocoding and Overpass beach/cliff discovery."""
 
 from __future__ import annotations
 
+import asyncio
+import time
+from typing import Any
+
 from ..cache import cached_call
-from ..config import (
-    OSRM_BATCH,
-    STRAIGHT_LINE_KM_PER_MIN,
-    TTL_DRIVE,
-    TTL_GEOCODE,
-    TTL_PLACES,
-)
+from ..config import NOMINATIM_MIN_INTERVAL_S, TTL_GEOCODE, TTL_PLACES
 from ..net import client, get_json, haversine_km
 
-NOMINATIM = "https://nominatim.openstreetmap.org/search"
+NOMINATIM_BASE = "https://nominatim.openstreetmap.org"
+NOMINATIM = f"{NOMINATIM_BASE}/search"
 OVERPASS = "https://overpass-api.de/api/interpreter"
-OSRM_TABLE = "https://router.project-osrm.org/table/v1/driving/"
 DEDUPE_KM = 1.0
+
+_nominatim_lock = asyncio.Lock()
+_nominatim_last = 0.0
+
+
+async def nominatim_get(url: str, params: dict[str, Any]) -> Any:
+    """GET from Nominatim, one request at a time and at most one per second (usage policy)."""
+    global _nominatim_last
+    async with _nominatim_lock:
+        wait = _nominatim_last + NOMINATIM_MIN_INTERVAL_S - time.monotonic()
+        if wait > 0:
+            await asyncio.sleep(wait)
+        try:
+            return await get_json(url, params=params)
+        finally:
+            _nominatim_last = time.monotonic()
 
 
 async def geocode(query: str) -> list[dict]:
@@ -23,7 +37,7 @@ async def geocode(query: str) -> list[dict]:
     params = {"q": q, "format": "jsonv2", "limit": 5, "addressdetails": 0}
 
     async def fetch() -> list[dict]:
-        rows = await get_json(NOMINATIM, params=params)
+        rows = await nominatim_get(NOMINATIM, params)
         return [
             {
                 "name": r.get("name") or r["display_name"].split(",")[0],
@@ -81,27 +95,3 @@ async def water_spots(lat: float, lon: float, radius_km: float) -> list[dict]:
     for s in spots:
         s["distance_km"] = round(haversine_km(lat, lon, s["lat"], s["lon"]), 2)
     return sorted(spots, key=lambda s: s["distance_km"])
-
-
-async def drive_minutes(origin: tuple[float, float], dests: list[tuple[float, float]]) -> tuple[list[float | None], str]:
-    """OSRM durations in minutes; returns (durations, method)."""
-    durations: list[float | None] = []
-    try:
-        for i in range(0, len(dests), OSRM_BATCH):
-            batch = dests[i : i + OSRM_BATCH]
-            coords = ";".join(f"{lo:.5f},{la:.5f}" for la, lo in [origin, *batch])
-            url = f"{OSRM_TABLE}{coords}"
-
-            async def fetch(url: str = url) -> list:
-                data = await get_json(url, params={"sources": "0", "annotations": "duration"}, timeout=45.0)
-                if data.get("code") != "Ok":
-                    raise RuntimeError(data.get("message", "OSRM error"))
-                return data["durations"][0][1:]
-
-            result = await cached_call("osrm", (url,), TTL_DRIVE, fetch, OSRM_TABLE)
-            durations.extend(None if d is None else round(d / 60, 1) for d in result.data)
-        return durations, "osrm"
-    except Exception:  # noqa: BLE001 - fall back to a labeled estimate
-        return [
-            round(haversine_km(origin[0], origin[1], la, lo) / STRAIGHT_LINE_KM_PER_MIN, 1) for la, lo in dests
-        ], "straight-line"

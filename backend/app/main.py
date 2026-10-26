@@ -59,7 +59,9 @@ async def health() -> dict:
 async def app_config() -> dict:
     return {
         "demo_beaches": [b.__dict__ for b in C.DEMO_BEACHES],
-        "drive_options": list(C.DRIVE_OPTIONS_MIN),
+        "nearby_default_mi": C.NEARBY_DEFAULT_MI,
+        "nearby_min_mi": C.NEARBY_MIN_MI,
+        "nearby_max_mi": C.NEARBY_MAX_MI,
         "chl_dataset": C.CHL_DATASET.dataset_id,
         "chl_variable": C.CHL_DATASET.variable,
         "chl_wms_url": f"{C.ERDDAP_BASE}/wms/{C.CHL_DATASET.dataset_id}/request",
@@ -70,7 +72,6 @@ async def app_config() -> dict:
         "ortho_max_zoom": C.ORTHO_MAX_ZOOM,
         "ortho_attribution": C.ORTHO_ATTRIBUTION,
         "safety_line": C.JUMP_SAFETY_LINE,
-        "max_km_per_min": C.MAX_KM_PER_MIN,
     }
 
 
@@ -125,7 +126,7 @@ async def gemma_search(req: NaturalSearchRequest) -> dict:
     if origin is None:
         warnings.append("Drop a pin or name a place so the drive time has a starting point.")
         return {"filter": outcome.model_dump(), "origin": None, "result": None, "warnings": warnings}
-    result = await nearby(origin.lat, origin.lon, flt.max_drive_min)
+    result = await nearby(origin, flt.max_drive_min * C.STRAIGHT_LINE_KM_PER_MIN)
     keep = [
         s
         for s in result.spots
@@ -152,11 +153,22 @@ async def map_tile(provider: str, z: int, x: int, y: int, date: str | None = Non
 
 
 @app.get("/api/nearby", response_model=NearbyResult)
-async def nearby_spots(
-    lat: Annotated[float, Query(ge=-90, le=90)],
-    lon: Annotated[float, Query(ge=-180, le=180)],
-    drive_min: Annotated[int, Query()] = 30,
+async def nearby_water(
+    radius_mi: Annotated[float, Query(ge=C.NEARBY_MIN_MI, le=C.NEARBY_MAX_MI)] = C.NEARBY_DEFAULT_MI,
+    address: Annotated[str | None, Query(min_length=2, max_length=200)] = None,
+    lat: Annotated[float | None, Query(ge=-90, le=90)] = None,
+    lon: Annotated[float | None, Query(ge=-180, le=180)] = None,
 ) -> NearbyResult:
-    if drive_min not in C.DRIVE_OPTIONS_MIN:
-        raise HTTPException(status_code=422, detail=f"drive_min must be one of {list(C.DRIVE_OPTIONS_MIN)}")
-    return await nearby(lat, lon, drive_min)
+    if address:
+        try:
+            hits = await geocode(address)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=502, detail=f"Address lookup failed ({type(exc).__name__}).") from exc
+        if not hits:
+            raise HTTPException(status_code=404, detail="No place found for that address. Try a fuller address.")
+        origin = Spot(name=hits[0]["display_name"][:120], lat=hits[0]["lat"], lon=hits[0]["lon"], kind="origin")
+    elif lat is not None and lon is not None:
+        origin = Spot(name="Search center", lat=lat, lon=lon, kind="origin")
+    else:
+        raise HTTPException(status_code=422, detail="Give an address, or lat and lon.")
+    return await nearby(origin, radius_mi * C.MI_TO_KM)

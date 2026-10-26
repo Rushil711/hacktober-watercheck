@@ -1,13 +1,13 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { Layers, MapPin, Navigation, Search, Sparkles, Waves, Wifi, WifiOff } from 'lucide-react'
+import { ArrowLeft, Layers, MapPin, Ruler, Search, Sparkles, Waves, Wifi, WifiOff } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { api, setOffline as setApiOffline } from './api'
-import { Empty, ErrorBox, Loading } from './components/common'
-import MapView, { type MapSpot } from './components/MapView'
+import { ErrorBox, Loading } from './components/common'
+import MapView, { type MapSpot, type MapTarget } from './components/MapView'
 import NearbyPanel from './components/NearbyPanel'
 import ReportPanel from './components/ReportPanel'
 import { FEATURES } from './features'
-import type { AppConfig, BeachReport, Candidate, Health, Insights, NearbyResult, SearchResult } from './types'
+import type { AppConfig, BeachReport, Health, Insights, NearbyResult, WaterBody } from './types'
 
 type Mode = 'spot' | 'near'
 type SpotRef = { name: string; lat: number; lon: number; kind: string }
@@ -28,13 +28,8 @@ export default function App() {
   const [health, setHealth] = useState<Health | null>(null)
   const [voice, setVoice] = useState<{ configured: boolean; problem: string | null; docs_url: string } | null>(null)
   const [bootError, setBootError] = useState<string | null>(null)
-  const [mode, setMode] = useState<Mode>('spot')
+  const [mode, setMode] = useState<Mode>('near')
   const [offline, setOffline] = useState(false)
-
-  const [query, setQuery] = useState('')
-  const [search, setSearch] = useState<SearchResult | null>(null)
-  const [searchLoading, setSearchLoading] = useState(false)
-  const [searchError, setSearchError] = useState<string | null>(null)
 
   const [spot, setSpot] = useState<SpotRef | null>(null)
   const [report, setReport] = useState<BeachReport | null>(null)
@@ -44,19 +39,18 @@ export default function App() {
   const [insightsLoading, setInsightsLoading] = useState(false)
   const [insightsError, setInsightsError] = useState<string | null>(null)
 
-  const [center, setCenter] = useState<[number, number]>(DEFAULT_CENTER)
-  const [zoom, setZoom] = useState(11)
+  const [target, setTarget] = useState<MapTarget>({ center: DEFAULT_CENTER, zoom: 11 })
   const [lens, setLens] = useState(0)
 
-  const [origin, setOrigin] = useState<{ lat: number; lon: number } | null>(null)
-  const [driveMin, setDriveMin] = useState(30)
+  const [address, setAddress] = useState('')
+  const [radiusInput, setRadiusInput] = useState('')
+  const [lastSearch, setLastSearch] = useState<{ address: string; radiusMi: number } | null>(null)
   const [nearby, setNearby] = useState<NearbyResult | null>(null)
   const [nearbyLoading, setNearbyLoading] = useState(false)
   const [nearbyError, setNearbyError] = useState<string | null>(null)
-  const [locating, setLocating] = useState(false)
-  const [askLoading, setAskLoading] = useState(false)
-  const [askNote, setAskNote] = useState<string | null>(null)
-  const [minTempFilter, setMinTempFilter] = useState<number | null>(null)
+  const [selectedWaterId, setSelectedWaterId] = useState<string | null>(null)
+  const [hoverId, setHoverId] = useState<string | null>(null)
+  const highlightId = hoverId ?? selectedWaterId
 
   const presentationIndex = useRef(-1)
   const reportAbort = useRef<AbortController | null>(null)
@@ -73,9 +67,7 @@ export default function App() {
     reportAbort.current = ctrl
     setMode('spot')
     setSpot(target)
-    setSearch(null)
-    setCenter([target.lat, target.lon])
-    setZoom(Math.min(16, Math.max(3, zoomOverride ?? 14)))
+    setTarget({ center: [target.lat, target.lon], zoom: Math.min(16, Math.max(3, zoomOverride ?? 14)) })
     setReport(null)
     setReportError(null)
     setInsights(null)
@@ -102,6 +94,16 @@ export default function App() {
     }
   }, [])
 
+  const closeSpot = useCallback(() => {
+    reportAbort.current?.abort()
+    setSpot(null)
+    setReport(null)
+    setReportError(null)
+    setReportLoading(false)
+    setInsights(null)
+    setInsightsLoading(false)
+  }, [])
+
   useEffect(() => {
     api
       .config()
@@ -124,109 +126,51 @@ export default function App() {
     return () => clearInterval(t)
   }, [refreshStatus, openSpot])
 
-  const runSearch = async (e: FormEvent) => {
+  const runNearby = useCallback(
+    async (addr: string, radiusMi: number) => {
+      nearbyAbort.current?.abort()
+      const ctrl = new AbortController()
+      nearbyAbort.current = ctrl
+      closeSpot()
+      setMode('near')
+      setLastSearch({ address: addr, radiusMi })
+      setNearby(null)
+      setNearbyError(null)
+      setSelectedWaterId(null)
+      setHoverId(null)
+      setNearbyLoading(true)
+      try {
+        const res = await api.nearby(addr, radiusMi, ctrl.signal)
+        setNearby(res)
+        setTarget({ circle: { lat: res.origin.lat, lon: res.origin.lon, km: res.radius_km } })
+      } catch (e) {
+        if (!ctrl.signal.aborted) setNearbyError(errMsg(e))
+      } finally {
+        if (!ctrl.signal.aborted) setNearbyLoading(false)
+      }
+    },
+    [closeSpot],
+  )
+
+  // The browser checks required, min, and max before this runs.
+  const submitNearby = (e: FormEvent) => {
     e.preventDefault()
-    const q = query.trim()
-    if (q.length < 2) return
-    setMode('spot')
-    setSearchLoading(true)
-    setSearchError(null)
-    setSearch(null)
-    try {
-      const res = await api.search(q)
-      setSearch(res)
-      if (res.place) {
-        setCenter([res.place.lat, res.place.lon])
-        setZoom(13)
-      }
-    } catch (err) {
-      setSearchError(errMsg(err))
-    } finally {
-      setSearchLoading(false)
-    }
+    const addr = address.trim()
+    const radiusMi = Number(radiusInput)
+    if (addr.length < 2 || !Number.isFinite(radiusMi)) return
+    runNearby(addr, radiusMi)
   }
 
-  const loadNearby = useCallback(async (o: { lat: number; lon: number }, minutes: number) => {
-    nearbyAbort.current?.abort()
-    const ctrl = new AbortController()
-    nearbyAbort.current = ctrl
-    setNearbyLoading(true)
-    setNearbyError(null)
-    try {
-      const res = await api.nearby(o.lat, o.lon, minutes, ctrl.signal)
-      setNearby(res)
-    } catch (e) {
-      if (!ctrl.signal.aborted) setNearbyError(errMsg(e))
-    } finally {
-      if (!ctrl.signal.aborted) setNearbyLoading(false)
-    }
-  }, [])
-
-  const setPin = (lat: number, lon: number) => {
-    const o = { lat, lon }
-    setOrigin(o)
-    setMinTempFilter(null)
-    setAskNote(null)
-    setCenter([lat, lon])
-    setZoom(driveMin >= 60 ? 9 : 10)
-    loadNearby(o, driveMin)
+  const selectWater = (b: WaterBody) => {
+    setSelectedWaterId(b.id)
+    if (b.report_available) openSpot({ name: b.name, lat: b.lat, lon: b.lon, kind: b.kind }, 13)
+    else setTarget({ geometry: b.geometry })
   }
 
-  const changeDrive = (m: number) => {
-    setDriveMin(m)
-    if (origin) {
-      setZoom(m >= 60 ? 9 : 10)
-      loadNearby(origin, m)
-    }
-  }
-
-  const locate = () => {
-    if (!navigator.geolocation) {
-      setNearbyError('This browser does not share location. Drop a pin instead.')
-      return
-    }
-    setLocating(true)
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLocating(false)
-        setPin(pos.coords.latitude, pos.coords.longitude)
-      },
-      (err) => {
-        setLocating(false)
-        setNearbyError(`Location unavailable (${err.message}). Drop a pin instead.`)
-      },
-      { timeout: 10000 },
-    )
-  }
-
-  const ask = async (question: string) => {
-    setAskLoading(true)
-    setAskNote(null)
-    try {
-      const res = await api.naturalSearch(question, origin)
-      if (!res.filter.ok || !res.filter.data) {
-        setAskNote(`Gemma could not turn that into a filter (${res.filter.error ?? 'invalid reply'}). Use the controls instead.`)
-        return
-      }
-      const f = res.filter.data
-      setDriveMin(f.max_drive_min)
-      setMinTempFilter(f.min_temp_f)
-      if (res.origin) {
-        setOrigin({ lat: res.origin.lat, lon: res.origin.lon })
-        setCenter([res.origin.lat, res.origin.lon])
-        setZoom(f.max_drive_min >= 60 ? 9 : 10)
-      }
-      if (res.result) setNearby(res.result)
-      setAskNote(
-        `Gemma filter: within ${f.max_drive_min} min${f.near ? ` of ${f.near}` : ''}` +
-          `${f.min_temp_f !== null ? `, sea temp ≥ ${f.min_temp_f} °F` : ''}, activity: ${f.activity}.` +
-          (res.warnings.length ? ` ${res.warnings.join(' ')}` : ''),
-      )
-    } catch (e) {
-      setAskNote(errMsg(e))
-    } finally {
-      setAskLoading(false)
-    }
+  const backToResults = () => {
+    closeSpot()
+    setMode('near')
+    if (nearby) setTarget({ circle: { lat: nearby.origin.lat, lon: nearby.origin.lon, km: nearby.radius_km } })
   }
 
   const spotRef = useRef<SpotRef | null>(null)
@@ -258,36 +202,15 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [config, openSpot])
 
-  const filteredNearby = useMemo(() => {
-    if (!nearby || minTempFilter === null) return nearby
-    return { ...nearby, spots: nearby.spots.filter((s) => s.sea_temp_f !== null && s.sea_temp_f >= minTempFilter) }
-  }, [nearby, minTempFilter])
+  const mapSpots: MapSpot[] = useMemo(
+    () => (mode === 'spot' && spot ? [{ id: 'selected', name: spot.name, lat: spot.lat, lon: spot.lon, halo: report?.halo ?? null }] : []),
+    [mode, spot, report],
+  )
 
-  const mapSpots: MapSpot[] = useMemo(() => {
-    if (mode === 'near') {
-      return (filteredNearby?.spots ?? []).map((s) => ({
-        id: `${s.name}-${s.lat}-${s.lon}`,
-        name: s.name,
-        lat: s.lat,
-        lon: s.lon,
-        halo: s.halo,
-        subtitle: `${Math.round(s.drive_min)} min drive`,
-      }))
-    }
-    const list: MapSpot[] = []
-    if (spot) list.push({ id: 'selected', name: spot.name, lat: spot.lat, lon: spot.lon, halo: report?.halo ?? null })
-    for (const c of search?.candidates ?? []) list.push({ id: `c-${c.name}-${c.lat}`, name: c.name, lat: c.lat, lon: c.lon, halo: null, subtitle: 'Click to check' })
-    return list
-  }, [mode, filteredNearby, spot, report, search])
-
-  const onSpotClick = (s: MapSpot) => {
-    if (s.id === 'selected') return
-    const kind = mode === 'near' ? filteredNearby?.spots.find((n) => `${n.name}-${n.lat}-${n.lon}` === s.id)?.kind ?? 'beach' : search?.candidates.find((c) => `c-${c.name}-${c.lat}` === s.id)?.kind ?? 'beach'
-    openSpot({ name: s.name, lat: s.lat, lon: s.lon, kind })
-  }
-
-  const scanning = reportLoading || nearbyLoading || searchLoading
+  const scanning = reportLoading || nearbyLoading
   const statusBadge = offline || health?.demo_mode
+  const minMi = config?.nearby_min_mi ?? 0.5
+  const maxMi = config?.nearby_max_mi ?? 25
 
   return (
     <div className="flex h-full flex-col">
@@ -301,43 +224,46 @@ export default function App() {
             <p className="text-[11px] text-slate-400">Satellite + official data · explained by Gemma</p>
           </div>
         </div>
-        <form onSubmit={runSearch} className="flex min-w-[260px] flex-1 items-center gap-2">
-          <div className="relative flex-1">
-            <Search size={15} className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
+        <form onSubmit={submitNearby} className="flex min-w-[280px] flex-1 flex-wrap items-center gap-2">
+          <div className="relative min-w-[220px] flex-[3]">
+            <MapPin size={15} className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
             <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Type an address or beach, then press Enter"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              required
+              minLength={2}
+              maxLength={200}
+              placeholder="Enter a starting address"
               className="w-full rounded-xl bg-white/10 py-2 pr-3 pl-9 text-sm placeholder:text-slate-500 focus:ring-2 focus:ring-teal-300 focus:outline-none"
-              aria-label="Address or beach"
+              aria-label="Starting address"
             />
           </div>
-          <button type="submit" className="rounded-xl bg-teal-400 px-4 py-2 text-sm font-semibold text-navy-900 hover:bg-teal-300">
-            Check
+          <div className="relative w-52 flex-none">
+            <Ruler size={15} className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
+            <input
+              type="number"
+              inputMode="decimal"
+              step="any"
+              min={minMi}
+              max={maxMi}
+              required
+              value={radiusInput}
+              onChange={(e) => setRadiusInput(e.target.value)}
+              placeholder="Radius in miles"
+              title={`Search radius: ${minMi} to ${maxMi} miles`}
+              className="w-full rounded-xl bg-white/10 py-2 pr-9 pl-9 text-sm placeholder:text-slate-500 focus:ring-2 focus:ring-teal-300 focus:outline-none"
+              aria-label="Search radius in miles"
+            />
+            <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-xs text-slate-400">mi</span>
+          </div>
+          <button
+            type="submit"
+            disabled={nearbyLoading}
+            className="flex items-center gap-1.5 rounded-xl bg-teal-400 px-4 py-2 text-sm font-semibold text-navy-900 hover:bg-teal-300 disabled:opacity-60"
+          >
+            <Search size={15} /> Search nearby
           </button>
         </form>
-        <nav className="flex overflow-hidden rounded-xl ring-1 ring-white/15">
-          <button
-            type="button"
-            onClick={() => setMode('spot')}
-            className={`flex items-center gap-1 px-3 py-2 text-sm ${mode === 'spot' ? 'bg-white/15 font-semibold' : 'hover:bg-white/10'}`}
-          >
-            <MapPin size={14} /> Check a spot
-          </button>
-          {FEATURES.nearMe ? (
-            <button
-              type="button"
-              onClick={() => setMode('near')}
-              className={`flex items-center gap-1 px-3 py-2 text-sm ${mode === 'near' ? 'bg-white/15 font-semibold' : 'hover:bg-white/10'}`}
-            >
-              <Navigation size={14} /> Near me
-            </button>
-          ) : (
-            <span className="flex cursor-not-allowed items-center gap-1 px-3 py-2 text-sm text-slate-500" title="Find water near me is not finished yet">
-              <Navigation size={14} /> Near me (coming soon)
-            </span>
-          )}
-        </nav>
         <div className="flex items-center gap-2 text-xs">
           <span
             className={`flex items-center gap-1 rounded-full px-2.5 py-1 font-semibold ${statusBadge ? 'bg-amber-400/20 text-amber-200' : 'bg-emerald-400/15 text-emerald-200'}`}
@@ -364,8 +290,7 @@ export default function App() {
       <main className="grid min-h-0 flex-1 gap-3 px-4 pb-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(380px,1fr)]">
         <div className="relative min-h-[380px]">
           <MapView
-            center={center}
-            zoom={zoom}
+            target={target}
             spots={mapSpots}
             selectedId={mode === 'spot' && spot ? 'selected' : null}
             gibsDate={report?.imagery.date ?? yesterdayUtc()}
@@ -373,10 +298,12 @@ export default function App() {
             lens={lens}
             scanning={scanning}
             offline={offline}
-            ring={mode === 'near' && origin && config ? { lat: origin.lat, lon: origin.lon, km: driveMin * config.max_km_per_min } : null}
-            origin={mode === 'near' ? origin : null}
-            onSpotClick={onSpotClick}
-            onMapClick={mode === 'near' ? setPin : undefined}
+            circle={nearby ? { lat: nearby.origin.lat, lon: nearby.origin.lon, km: nearby.radius_km } : null}
+            origin={nearby?.origin ?? null}
+            water={nearby?.spots ?? []}
+            highlightId={highlightId}
+            onWaterClick={selectWater}
+            onWaterHover={setHoverId}
           />
           <div className="glass-strong absolute bottom-4 left-4 z-[600] w-64 rounded-xl p-3 text-xs">
             <label className="flex items-center justify-between gap-2 font-semibold text-teal-100">
@@ -400,7 +327,7 @@ export default function App() {
               <span>Imagery</span>
               <span>Chlorophyll</span>
             </div>
-            {!report && <p className="mt-1 text-[10px] text-slate-500">Open a report to enable the chlorophyll layer.</p>}
+            {!report && <p className="mt-1 text-[10px] text-slate-500">Open a beach or bay report to enable the chlorophyll layer.</p>}
           </div>
           {FEATURES.presentationKeys && (
             <div className="glass-strong absolute top-4 right-4 z-[600] rounded-xl px-3 py-2 text-[11px] text-slate-300">
@@ -414,37 +341,25 @@ export default function App() {
             {mode === 'near' ? (
               <motion.div key="near" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}>
                 <NearbyPanel
-                  driveOptions={config?.drive_options ?? [15, 30, 60]}
-                  driveMin={driveMin}
-                  onDriveMin={changeDrive}
-                  origin={origin}
-                  onLocate={locate}
-                  locating={locating}
-                  result={filteredNearby}
+                  result={nearby}
+                  radiusMi={lastSearch?.radiusMi ?? null}
                   loading={nearbyLoading}
                   error={nearbyError}
-                  onRetry={() => origin && loadNearby(origin, driveMin)}
-                  onOpen={(s) => openSpot({ name: s.name, lat: s.lat, lon: s.lon, kind: s.kind })}
-                  onAsk={ask}
-                  askLoading={askLoading}
-                  askNote={askNote}
+                  onRetry={() => lastSearch && runNearby(lastSearch.address, lastSearch.radiusMi)}
+                  highlightId={highlightId}
+                  onHover={setHoverId}
+                  onSelect={selectWater}
                 />
               </motion.div>
             ) : (
               <motion.div key="spot" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} className="space-y-3">
-                {searchLoading && <Loading label="Looking up that place…" />}
-                {searchError && <ErrorBox message={searchError} />}
-                {search && <CandidatePicker search={search} onPick={(c) => openSpot(c)} />}
+                <button type="button" onClick={backToResults} className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-teal-100 hover:bg-white/10">
+                  <ArrowLeft size={15} /> {nearby ? `Back to ${nearby.spots.length} results` : 'Search nearby'}
+                </button>
                 {reportLoading && <Loading label="Reading satellite passes and official status…" />}
                 {reportError && <ErrorBox message={reportError} onRetry={spot ? () => openSpot(spot) : undefined} />}
                 {report && !reportLoading && (
                   <ReportPanel report={report} insights={insights} insightsLoading={insightsLoading} insightsError={insightsError} voice={voice} />
-                )}
-                {!search && !searchLoading && !report && !reportLoading && !reportError && (
-                  <Empty title="Check a spot">
-                    Type an address or beach above, click a pin, or press <strong>P</strong> to cycle the demo beaches
-                    {config ? ` (${config.demo_beaches.map((b) => b.name).join(', ')})` : ''}.
-                  </Empty>
                 )}
               </motion.div>
             )}
@@ -452,73 +367,5 @@ export default function App() {
         </aside>
       </main>
     </div>
-  )
-}
-
-function CandidatePicker({ search, onPick }: { search: SearchResult; onPick: (c: Candidate) => void }) {
-  const { place, candidates } = search
-  return (
-    <section className="glass-strong rounded-2xl p-4">
-      {place ? (
-        <p className="text-xs text-slate-400">
-          Found: <span className="text-slate-200">{place.name}</span>
-        </p>
-      ) : (
-        <p className="text-sm text-slate-300">No place found for “{search.query}”. Try a fuller address.</p>
-      )}
-      {search.warnings.map((w, i) => (
-        <p key={i} className="mt-1 text-xs text-amber-200">
-          {w}
-        </p>
-      ))}
-      {place && candidates.length === 0 && (
-        <div className="mt-2 space-y-2 text-sm text-slate-300">
-          <p>No named beach or coastal cliff within a few km.</p>
-          <button
-            type="button"
-            onClick={() => onPick({ ...place, kind: 'place' })}
-            className="rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15"
-          >
-            Check this exact point anyway
-          </button>
-        </div>
-      )}
-      {candidates.length === 1 && (
-        <div className="mt-2">
-          <p className="text-sm text-slate-200">
-            We found <strong>{candidates[0].name}</strong> ({candidates[0].kind}, {candidates[0].distance_km.toFixed(1)} km away). Is this the one?
-          </p>
-          <button
-            type="button"
-            onClick={() => onPick(candidates[0])}
-            className="mt-2 rounded-lg bg-teal-400 px-3 py-1.5 text-sm font-semibold text-navy-900 hover:bg-teal-300"
-          >
-            Yes, check it
-          </button>
-        </div>
-      )}
-      {candidates.length > 1 && (
-        <div className="mt-2">
-          <p className="text-sm text-slate-200">Several spots are nearby. Pick one:</p>
-          <ul className="mt-2 space-y-1">
-            {candidates.map((c) => (
-              <li key={`${c.name}-${c.lat}`}>
-                <button
-                  type="button"
-                  onClick={() => onPick(c)}
-                  className="flex w-full items-center justify-between rounded-lg bg-white/5 px-3 py-2 text-left text-sm hover:bg-white/10"
-                >
-                  <span>{c.name}</span>
-                  <span className="text-xs text-slate-400">
-                    {c.kind} · {c.distance_km.toFixed(1)} km
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <p className="mt-2 text-[10px] text-slate-500">{search.attribution}</p>
-    </section>
   )
 }

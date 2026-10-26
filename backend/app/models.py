@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -177,23 +177,28 @@ class SearchResult(BaseModel):
     warnings: list[str] = []
 
 
-class NearbySpot(BaseModel):
+class WaterBody(BaseModel):
+    id: str
     name: str
+    kind: str  # beach, bay, river, lake, reservoir, estuary, or lagoon
     lat: float
     lon: float
-    kind: str
-    drive_min: float
-    drive_method: Literal["osrm", "straight-line"]
-    halo: Halo
-    official_status: OfficialStatusCode
+    distance_km: float  # to the nearest point of the outline
+    source: str
+    geometry: dict[str, Any]  # GeoJSON, simplified to about 30 m
+    report_available: bool = False  # the ocean report covers beaches and bays only
+    halo: Halo | None = None
+    official_status: OfficialStatusCode | None = None
     sea_temp_f: float | None = None
     chl: float | None = None
 
 
 class NearbyResult(BaseModel):
     origin: Spot
-    drive_min: int
-    ring_km: float
-    spots: list[NearbySpot]
-    attribution: str = "Places © OpenStreetMap contributors (ODbL). Drive times by OSRM."
+    radius_km: float
+    spots: list[WaterBody]
+    attribution: str = (
+        "Beaches, bays, and rivers © OpenStreetMap contributors (ODbL), via Nominatim. "
+        "Lakes and reservoirs: USGS National Hydrography Dataset (US only)."
+    )
     warnings: list[str] = []

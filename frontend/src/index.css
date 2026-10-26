@@ -18,8 +18,14 @@ body,
 
 body {
   margin: 0;
-  background: radial-gradient(1200px 800px at 20% -10%, #0e3a5c 0%, var(--color-navy-900) 45%, var(--color-navy-950) 100%);
+  background: var(--color-navy-900);
   color: #e6f1ff;
+}
+
+/* One visible focus ring for every control (WCAG 2.4.7). */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid #5eead4;
+  outline-offset: 2px;
 }
 
 .glass {
@@ -45,6 +51,11 @@ body {
    add up and show bright lines on the imagery. */
 .leaflet-container img.leaflet-tile {
   mix-blend-mode: normal;
+}
+
+/* Water bodies without data show on the map but cannot be clicked. */
+.leaflet-interactive.no-data {
+  cursor: not-allowed;
 }
 
 .leaflet-control-attribution {
@@ -77,7 +88,7 @@ body {
   display: grid;
   place-items: center;
   color: #06142b;
-  box-shadow: 0 0 18px currentColor;
+  border: 2px solid #06142b;
 }
 
 .halo-marker.selected .core {
@@ -120,13 +131,8 @@ body {
 }
 
 .window-glow {
-  box-shadow:
-    0 0 14px rgba(45, 212, 191, 0.75),
-    inset 0 0 8px rgba(153, 246, 228, 0.5);
-}
-
-input[type='range'].lens {
-  accent-color: #2dd4bf;
+  outline: 2px solid #5eead4;
+  outline-offset: -2px;
 }
 
 @media (prefers-reduced-motion: reduce) {

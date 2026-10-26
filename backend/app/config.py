@@ -88,6 +88,15 @@ ORTHO_MAX_ZOOM = 16
 ORTHO_ATTRIBUTION = "USDA, USGS The National Map: Orthoimagery"
 GIBS_EMPTY_DARK_FRACTION = 0.95
 
+# Fill for blank imagery pixels: the USGS tiles are white or black offshore and outside the US,
+# and the daily NOAA-20 tiles are black where a pass has no data. NASA Blue Marble with
+# bathymetry is static, global, and complete (about 500 m per pixel, native zoom <= 8).
+FILL_LAYER = "BlueMarble_ShadedRelief_Bathymetry"
+FILL_TILE_TEMPLATE = (
+    "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/" + FILL_LAYER + "/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg"
+)
+FILL_MAX_ZOOM = 8
+
 # --- Measurement box and thresholds ---
 OFFSHORE_BOX_KM = 2.0  # half-size of the box around the beach; cells that overlap it are averaged
 TREND_DAYS = 7
@@ -152,6 +161,7 @@ TTL_GEOCODE = 30 * 24 * 3600
 TTL_GIBS = 60 * 60
 TTL_GEMMA = 6 * 3600
 TTL_TILES = 24 * 3600
+TTL_FILL = 30 * 24 * 3600  # Blue Marble does not change
 
 GEMMA_TEMPERATURE = 0.2
 

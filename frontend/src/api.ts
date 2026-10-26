@@ -82,6 +82,9 @@ export const api = {
   },
 }
 
+// Bump when the server changes what a tile looks like, so browsers drop their cached copies.
+const TILE_VERSION = 2
+
 export function tileUrl(provider: 'base' | 'ortho' | 'gibs' | 'chl', extra = ''): string {
-  return withOffline(`/api/tiles/${provider}/{z}/{x}/{y}${extra}`)
+  return withOffline(`/api/tiles/${provider}/{z}/{x}/{y}${extra}${extra ? '&' : '?'}v=${TILE_VERSION}`)
 }

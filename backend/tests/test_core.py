@@ -157,3 +157,20 @@ def test_wms_rows_are_remapped_to_mercator():
 def test_unicode_labels_keep_numbers_grounded():
     allowed = harness.allowed_numbers(json.dumps({"label": "4 PM–6 PM"}, ensure_ascii=False))
     assert harness.ungrounded_numbers(["Best from 4 PM to 6 PM"], allowed) == []
+
+
+def test_blank_mask_fills_no_data_but_keeps_small_white_features():
+    from PIL import Image, ImageDraw
+
+    from app.tiles import blank_mask
+
+    img = Image.new("RGB", (256, 256), (110, 120, 130))
+    draw = ImageDraw.Draw(img)
+    draw.rectangle((0, 0, 99, 255), fill=(255, 255, 255))  # offshore no-data band
+    draw.rectangle((200, 200, 203, 203), fill=(255, 255, 255))  # a white roof
+    mask = blank_mask(img, white=True)
+    assert mask is not None
+    assert mask.getpixel((50, 128)) == 255 and mask.getpixel((101, 128)) == 255  # band plus fringe
+    assert mask.getpixel((201, 201)) == 0 and mask.getpixel((150, 128)) == 0
+    assert blank_mask(img, white=False) is None  # gibs: white is cloud, not no-data
+    assert blank_mask(Image.new("RGB", (256, 256), (0, 0, 0)), white=False) is not None

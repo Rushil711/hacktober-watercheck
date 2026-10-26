@@ -206,7 +206,7 @@ export default function MapView(props: Props) {
         <TileLayer
           key={`base-${offline}`}
           url={baseUrl}
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          attribution='Base: <a href="https://earthdata.nasa.gov/gibs">NASA Blue Marble</a>'
           maxZoom={MAP_MAX_ZOOM}
         />
         <TileLayer

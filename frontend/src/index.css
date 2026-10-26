@@ -40,6 +40,12 @@ body {
   font-family: inherit;
 }
 
+/* Leaflet 1.9 blends tiles with plus-lighter. Where scaled tile edges overlap, the colors
+   add up and show bright lines on the imagery. */
+.leaflet-container img.leaflet-tile {
+  mix-blend-mode: normal;
+}
+
 .leaflet-control-attribution {
   background: rgba(6, 20, 43, 0.75) !important;
   color: #9fb3c8 !important;
